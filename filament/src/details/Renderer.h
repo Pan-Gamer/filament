@@ -76,8 +76,7 @@ public:
     // do all the work here!
     void renderJob(ArenaScope& arena, FView& view);
 
-    bool beginFrame(FSwapChain* swapChain, uint64_t vsyncSteadyClockTimeNano,
-            backend::FrameScheduledCallback callback, void* user);
+    bool beginFrame(FSwapChain* swapChain, uint64_t vsyncSteadyClockTimeNano);
 
     void render(FView const* view);
 
@@ -156,7 +155,7 @@ private:
             FrameGraphTexture::Descriptor const& colorBufferDesc,
             ColorPassConfig const& config,
             PostProcessManager::ColorGradingConfig colorGradingConfig,
-            RenderPass const& pass, FView const& view) const noexcept;
+            RenderPass::Executor const& passExecutor, FView const& view) const noexcept;
 
     FrameGraphId<FrameGraphTexture> refractionPass(FrameGraph& fg,
             ColorPassConfig config,
@@ -202,7 +201,7 @@ private:
     DisplayInfo mDisplayInfo;
     FrameRateOptions mFrameRateOptions;
     ClearOptions mClearOptions;
-    backend::TargetBufferFlags mDiscardedFlags{};
+    backend::TargetBufferFlags mDiscardStartFlags{};
     backend::TargetBufferFlags mClearFlags{};
     tsl::robin_set<FRenderTarget*> mPreviousRenderTargets;
     std::function<void()> mBeginFrameInternal;

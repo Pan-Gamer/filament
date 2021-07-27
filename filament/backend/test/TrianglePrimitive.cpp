@@ -44,13 +44,18 @@ TrianglePrimitive::TrianglePrimitive(filament::backend::DriverApi& driverApi,
                     .flags = 0
             }
     };
+
+   // Backends do not (and should not) know the semantics of each vertex attribute, but they
+   // need to know whether the vertex shader consumes them as integers or as floats.
+   // NOTE: This flag needs to be set regardless of whether the attribute is actually declared.
+   attributes[BONE_INDICES].flags |= Attribute::FLAG_INTEGER_TARGET;
+
     AttributeBitset enabledAttributes;
     enabledAttributes.set(VertexAttribute::POSITION);
 
     const size_t size = sizeof(math::float2) * 3;
-    mBufferObject = mDriverApi.createBufferObject(size, BufferObjectBinding::VERTEX);
-    mVertexBuffer = mDriverApi.createVertexBuffer(1, 1, mVertexCount, attributes,
-            BufferUsage::STATIC);
+    mBufferObject = mDriverApi.createBufferObject(size, BufferObjectBinding::VERTEX, BufferUsage::STATIC);
+    mVertexBuffer = mDriverApi.createVertexBuffer(1, 1, mVertexCount, attributes);
     mDriverApi.setVertexBufferObject(mVertexBuffer, 0, mBufferObject);
     BufferDescriptor vertexBufferDesc(gVertices, size, nullptr);
     mDriverApi.updateBufferObject(mBufferObject, std::move(vertexBufferDesc), 0);
@@ -88,6 +93,18 @@ void TrianglePrimitive::updateIndices(const short indices[3]) noexcept {
         free(buffer);
     });
     mDriverApi.updateIndexBuffer(mIndexBuffer, std::move(bufferDesc), 0);
+}
+
+void TrianglePrimitive::updateIndices(const short* indices, int count, int offset) noexcept {
+    void* buffer = malloc(sizeof(short) * count);
+    short* indexBuffer = (short*) buffer;
+    std::copy(indices, indices + count, indexBuffer);
+
+    BufferDescriptor bufferDesc(indexBuffer, sizeof(short) * count,
+            [] (void* buffer, size_t size, void* user) {
+        free(buffer);
+    });
+    mDriverApi.updateIndexBuffer(mIndexBuffer, std::move(bufferDesc), offset * sizeof(short));
 }
 
 TrianglePrimitive::~TrianglePrimitive() {

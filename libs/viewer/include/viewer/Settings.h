@@ -24,6 +24,8 @@
 #include <filament/Scene.h>
 #include <filament/View.h>
 
+#include <utils/compiler.h>
+
 #include <math/vec3.h>
 #include <math/vec4.h>
 
@@ -47,6 +49,15 @@ struct ViewSettings;
 struct LightSettings;
 struct ViewerOptions;
 
+enum class ToneMapping : uint8_t {
+    LINEAR        = 0,
+    ACES_LEGACY   = 1,
+    ACES          = 2,
+    FILMIC        = 3,
+    GENERIC       = 4,
+    DISPLAY_RANGE = 5,
+};
+
 using AmbientOcclusionOptions = filament::View::AmbientOcclusionOptions;
 using AntiAliasing = filament::View::AntiAliasing;
 using BloomOptions = filament::View::BloomOptions;
@@ -56,7 +67,6 @@ using FogOptions = filament::View::FogOptions;
 using RenderQuality = filament::View::RenderQuality;
 using ShadowType = filament::View::ShadowType;
 using TemporalAntiAliasingOptions = filament::View::TemporalAntiAliasingOptions;
-using ToneMapping = filament::ColorGrading::ToneMapping;
 using VignetteOptions = filament::View::VignetteOptions;
 using VsmShadowOptions = filament::View::VsmShadowOptions;
 using LightManager = filament::LightManager;
@@ -65,14 +75,15 @@ using LightManager = filament::LightManager;
 void applySettings(const ViewSettings& settings, View* dest);
 void applySettings(const MaterialSettings& settings, MaterialInstance* dest);
 void applySettings(const LightSettings& settings, IndirectLight* ibl, utils::Entity sunlight,
-        LightManager* lm, Scene* scene);
+        utils::Entity* sceneLights, size_t sceneLightCount, LightManager* lm, Scene* scene);
 void applySettings(const ViewerOptions& settings, Camera* camera, Skybox* skybox,
         Renderer* renderer);
 
 // Creates a new ColorGrading object based on the given settings.
+UTILS_PUBLIC
 ColorGrading* createColorGrading(const ColorGradingSettings& settings, Engine* engine);
 
-class JsonSerializer {
+class UTILS_PUBLIC JsonSerializer {
 public:
     JsonSerializer();
     ~JsonSerializer();
@@ -91,12 +102,25 @@ private:
     Context* context;
 };
 
+struct GenericToneMapperSettings {
+    float contrast = 1.4f;
+    float shoulder = 0.5f;
+    float midGrayIn = 0.18f;
+    float midGrayOut = 0.266f;
+    float hdrMax = 10.0f;
+    bool operator!=(const GenericToneMapperSettings &rhs) const { return !(rhs == *this); }
+    bool operator==(const GenericToneMapperSettings &rhs) const;
+};
+
 struct ColorGradingSettings {
     bool enabled = true;
     filament::ColorGrading::QualityLevel quality = filament::ColorGrading::QualityLevel::MEDIUM;
     ToneMapping toneMapping = ToneMapping::ACES_LEGACY;
-    float temperature = 0;
-    float tint = 0;
+    GenericToneMapperSettings genericToneMapper;
+    bool luminanceScaling = false;
+    float exposure = 0.0f;
+    float temperature = 0.0f;
+    float tint = 0.0f;
     math::float3 outRed{1.0f, 0.0f, 0.0f};
     math::float3 outGreen{0.0f, 1.0f, 0.0f};
     math::float3 outBlue{0.0f, 0.0f, 1.0f};
@@ -174,6 +198,7 @@ struct ViewerOptions {
     sRGBColor backgroundColor = { 0.0f };
     float cameraFocalLength = 28.0f;
     float cameraFocusDistance = 10.0f;
+    bool autoScaleEnabled = true;
 };
 
 struct Settings {

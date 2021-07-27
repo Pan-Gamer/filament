@@ -65,6 +65,11 @@ using namespace filament::viewer;
 using namespace gltfio;
 using namespace utils;
 
+enum MaterialSource {
+    GENERATE_SHADERS,
+    LOAD_UBERSHADERS,
+};
+
 struct App {
     Engine* engine;
     SimpleViewer* viewer;
@@ -312,8 +317,7 @@ static void createGroundPlane(Engine* engine, Scene* scene, App& app) {
     Entity groundPlane = em.create();
     RenderableManager::Builder(1)
             .boundingBox({
-                { -planeExtent.x, 0, -planeExtent.z },
-                { planeExtent.x, 1e-4f, planeExtent.z }
+                    {}, { planeExtent.x, 1e-4f, planeExtent.z }
             })
             .material(0, shadowMaterial->getDefaultInstance())
             .geometry(0, RenderableManager::PrimitiveType::TRIANGLES,
@@ -435,6 +439,7 @@ int main(int argc, char** argv) {
         app.engine = engine;
         app.names = new NameComponentManager(EntityManager::get());
         app.viewer = new SimpleViewer(engine, scene, view, 410);
+        app.viewer->getSettings().viewer.autoScaleEnabled = !app.actualSize;
 
         const bool batchMode = !app.batchFile.empty();
 
@@ -608,8 +613,11 @@ int main(int argc, char** argv) {
     auto animate = [&app](Engine* engine, View* view, double now) {
         app.resourceLoader->asyncUpdateLoad();
 
+        // Optionally fit the model into a unit cube at the origin.
+        app.viewer->updateRootTransform();
+
         // Add renderables to the scene as they become ready.
-        app.viewer->populateScene(app.asset, !app.actualSize);
+        app.viewer->populateScene(app.asset);
 
         app.viewer->applyAnimation(now);
     };
@@ -705,11 +713,13 @@ int main(int argc, char** argv) {
             FilamentApp::get().close();
             return;
         }
-        Settings* settings = &app.viewer->getSettings();
-        MaterialInstance* const* materials = app.asset->getMaterialInstances();
-        size_t materialCount = app.asset->getMaterialInstanceCount();
-        app.automationEngine->tick(view, materials, materialCount, renderer,
-                ImGui::GetIO().DeltaTime);
+        AutomationEngine::ViewerContent content = {
+            .view = view,
+            .renderer = renderer,
+            .materials = app.asset->getMaterialInstances(),
+            .materialCount = app.asset->getMaterialInstanceCount(),
+        };
+        app.automationEngine->tick(content, ImGui::GetIO().DeltaTime);
     };
 
     FilamentApp& filamentApp = FilamentApp::get();

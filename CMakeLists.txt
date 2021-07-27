@@ -1,7 +1,7 @@
 # ==================================================================================================
 # CMake
 # ==================================================================================================
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.19)
 
 # ==================================================================================================
 # Project declaration
@@ -11,8 +11,6 @@ project(TNT)
 # ==================================================================================================
 # Options
 # ==================================================================================================
-option(FILAMENT_ENABLE_JAVA "Compile Java projects, requires a JDK and the JAVA_HOME env var" ON)
-
 option(FILAMENT_USE_EXTERNAL_GLES3 "Experimental: Compile Filament against OpenGL ES 3" OFF)
 
 option(FILAMENT_USE_SWIFTSHADER "Compile Filament against SwiftShader" OFF)
@@ -24,6 +22,10 @@ option(FILAMENT_SKIP_SAMPLES "Don't build samples" OFF)
 option(FILAMENT_SUPPORTS_XCB "Include XCB support in Linux builds" ON)
 
 option(FILAMENT_SUPPORTS_XLIB "Include XLIB support in Linux builds" ON)
+
+set(FILAMENT_NDK_VERSION "" CACHE STRING
+    "Android NDK version or version prefix to be used when building for Android."
+)
 
 set(FILAMENT_PER_RENDER_PASS_ARENA_SIZE_IN_MB "2" CACHE STRING
     "Per render pass arena size. Must be roughly 1 MB larger than FILAMENT_PER_FRAME_COMMANDS_SIZE_IN_MB, default 2."
@@ -37,8 +39,12 @@ set(FILAMENT_MIN_COMMAND_BUFFERS_SIZE_IN_MB "1" CACHE STRING
     "Size of the command-stream buffer. As a rule of thumb use the same value as FILAMENT_PER_FRRAME_COMMANDS_SIZE_IN_MB, default 1."
 )
 
-set(FILAMENT_OPENGL_HANDLE_ARENA_SIZE_IN_MB "2" CACHE STRING
-    "Size of the OpenGL handle arena, default 2."
+set(FILAMENT_OPENGL_HANDLE_ARENA_SIZE_IN_MB "4" CACHE STRING
+    "Size of the OpenGL handle arena, default 4."
+)
+
+set(FILAMENT_METAL_HANDLE_ARENA_SIZE_IN_MB "8" CACHE STRING
+    "Size of the Metal handle arena, default 8."
 )
 
 # ==================================================================================================
@@ -285,6 +291,12 @@ if (UNIX AND CMAKE_GENERATOR STREQUAL "Ninja")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fcolor-diagnostics")
 endif()
 
+# Use hidden by default and expose what we need.
+if (NOT WIN32)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fvisibility=hidden")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility=hidden")
+endif()
+
 # ==================================================================================================
 # Release compiler flags
 # ==================================================================================================
@@ -365,6 +377,12 @@ if (CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebIn
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DTNT_DEV")
 endif()
 
+# By default, build with support for OpenGL on all platforms.
+option(FILAMENT_SUPPORTS_OPENGL "Include the OpenGL backend" ON)
+if (FILAMENT_SUPPORTS_OPENGL)
+    add_definitions(-DFILAMENT_SUPPORTS_OPENGL)
+endif()
+
 # By default, build with Vulkan support on desktop platforms, although clients must request to use
 # it at run time.
 if (WIN32 OR WEBGL OR IOS)
@@ -420,9 +438,9 @@ endif()
 
 set(MATC_API_FLAGS )
 
-# TODO: Add a flag to build Filament without support for OpenGL.
-set(MATC_API_FLAGS ${MATC_API_FLAGS} -a opengl)
-
+if (FILAMENT_SUPPORTS_OPENGL)
+    set(MATC_API_FLAGS ${MATC_API_FLAGS} -a opengl)
+endif()
 if (FILAMENT_SUPPORTS_VULKAN)
     set(MATC_API_FLAGS ${MATC_API_FLAGS} -a vulkan)
 endif()
@@ -430,8 +448,9 @@ if (FILAMENT_SUPPORTS_METAL)
     set(MATC_API_FLAGS ${MATC_API_FLAGS} -a metal)
 endif()
 
+# Disable optimizations and enable debug info (preserves names in SPIR-V)
 if (FILAMENT_DISABLE_MATOPT)
-    set(MATC_OPT_FLAGS -g)
+    set(MATC_OPT_FLAGS -gd)
 endif()
 
 set(MATC_BASE_FLAGS ${MATC_API_FLAGS} -p ${MATC_TARGET} ${MATC_OPT_FLAGS})
@@ -449,11 +468,15 @@ if (NOT DIST_ARCH)
     if (CMAKE_OSX_ARCHITECTURES MATCHES ".*;.*")
         set(DIST_ARCH "universal")
     else()
-        if (NOT CMAKE_OSX_ARCHITECTURES STREQUAL "")
+        if (NOT "${CMAKE_OSX_ARCHITECTURES}" STREQUAL "")
             set(DIST_ARCH "${CMAKE_OSX_ARCHITECTURES}")
         endif()
     endif()
+
 endif()
+# On Windows machines, the host processor is set to 'AMD64', which we'll interpret as x86_64.
+string(TOLOWER "${DIST_ARCH}" DIST_ARCH)
+string(REPLACE "amd64" "x86_64" DIST_ARCH "${DIST_ARCH}")
 if (NOT DIST_DIR)
     set(DIST_DIR "${DIST_ARCH}")
 endif()
@@ -635,13 +658,11 @@ if (WEBGL)
 endif()
 
 if (IS_HOST_PLATFORM)
-    add_subdirectory(${LIBRARIES}/bluegl)
+    if (FILAMENT_SUPPORTS_OPENGL)
+        add_subdirectory(${LIBRARIES}/bluegl)
+    endif()
     add_subdirectory(${LIBRARIES}/filamentapp)
     add_subdirectory(${LIBRARIES}/imageio)
-
-    add_subdirectory(${FILAMENT}/java/filamat)
-    add_subdirectory(${FILAMENT}/java/filament)
-    add_subdirectory(${FILAMENT}/java/gltfio)
 
     add_subdirectory(${FILAMENT}/samples)
 

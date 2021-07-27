@@ -1,4 +1,5 @@
-cmake_minimum_required(VERSION 3.6)
+cmake_minimum_required(VERSION 3.19)
+project(gltfio-android)
 
 set(FILAMENT_DIR ${FILAMENT_DIST_DIR})
 set(GLTFIO_DIR ../../libs/gltfio)
@@ -60,7 +61,9 @@ set(GLTFIO_SRCS
         src/main/cpp/AssetLoader.cpp
         src/main/cpp/FilamentAsset.cpp
         src/main/cpp/FilamentInstance.cpp
-        src/main/cpp/MaterialProvider.cpp
+        src/main/cpp/MaterialKey.cpp
+        src/main/cpp/MaterialKey.h
+        src/main/cpp/UbershaderLoader.cpp
         src/main/cpp/ResourceLoader.cpp
 
         ${FILAMENT_DIR}/include/gltfio/resources/gltfresources_lite.h

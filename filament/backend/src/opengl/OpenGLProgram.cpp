@@ -25,7 +25,7 @@
 
 #include <private/backend/BackendUtils.h>
 
-#include <cctype>
+#include <ctype.h>
 
 namespace filament {
 
@@ -77,7 +77,8 @@ OpenGLProgram::OpenGLProgram(OpenGLDriver* gl, const Program& programBuilder) no
 
             glGetShaderiv(shaderId, GL_COMPILE_STATUS, &status);
             if (UTILS_UNLIKELY(status != GL_TRUE)) {
-                logCompilationError(slog.e, shaderId, source);
+                logCompilationError(slog.e, type,
+                        programBuilder.getName().c_str_safe(), shaderId, source);
                 glDeleteShader(shaderId);
                 return;
             }
@@ -101,13 +102,11 @@ OpenGLProgram::OpenGLProgram(OpenGLDriver* gl, const Program& programBuilder) no
 
         glGetProgramiv(program, GL_LINK_STATUS, &status);
         if (UTILS_UNLIKELY(status != GL_TRUE)) {
-            char error[512];
-            glGetProgramInfoLog(program, sizeof(error), nullptr, error);
-
-            slog.e << "LINKING: " << error << io::endl;
+            logProgramLinkError(slog.e, programBuilder.getName().c_str_safe(), program);
             glDeleteProgram(program);
             return;
         }
+
         this->gl.program = program;
 
         // Associate each UniformBlock in the program to a known binding.
@@ -232,15 +231,24 @@ void OpenGLProgram::updateSamplers(OpenGLDriver* gld) noexcept {
                 t->gl.fence = nullptr;
             }
 
+            SamplerParams params{ samplers[index].s };
+            if (UTILS_UNLIKELY(t->target == SamplerType::SAMPLER_EXTERNAL)) {
+                // From OES_EGL_image_external spec:
+                // "The default s and t wrap modes are CLAMP_TO_EDGE and it is an INVALID_ENUM
+                //  error to set the wrap mode to any other value."
+                params.wrapS = SamplerWrapMode::CLAMP_TO_EDGE;
+                params.wrapT = SamplerWrapMode::CLAMP_TO_EDGE;
+                params.wrapR = SamplerWrapMode::CLAMP_TO_EDGE;
+            }
+
             gld->bindTexture(tmu, t);
-            gld->bindSampler(tmu, samplers[index].s);
+            gld->bindSampler(tmu, params);
 
 #if defined(GL_EXT_texture_filter_anisotropic)
             if (UTILS_UNLIKELY(anisotropyWorkaround)) {
                 // Driver claims to support anisotropic filtering, but it fails when set on
                 // the sampler, we have to set it on the texture instead.
                 // The texture is already bound here.
-                SamplerParams params = samplers[index].s;
                 GLfloat anisotropy = float(1u << params.anisotropyLog2);
                 glTexParameterf(t->gl.target, GL_TEXTURE_MAX_ANISOTROPY_EXT,
                         std::min(glc.gets.max_anisotropy, anisotropy));
@@ -251,11 +259,23 @@ void OpenGLProgram::updateSamplers(OpenGLDriver* gld) noexcept {
     CHECK_GL_ERROR(utils::slog.e)
 }
 
-void UTILS_NOINLINE OpenGLProgram::logCompilationError(
-        io::ostream& out, GLuint shaderId, char const* source) noexcept {
-    char error[512];
+UTILS_NOINLINE
+void OpenGLProgram::logCompilationError(io::ostream& out, Program::Shader shaderType,
+        const char* name, GLuint shaderId, char const* source) noexcept {
+
+    auto to_string = [](Program::Shader type) -> const char* {
+        switch (type) {
+            case Program::Shader::VERTEX:       return "vertex";
+            case Program::Shader::FRAGMENT:     return "fragment";
+        }
+    };
+
+    char error[1024];
     glGetShaderInfoLog(shaderId, sizeof(error), nullptr, error);
-    out << "COMPILE ERROR: " << io::endl << error << io::endl;
+
+    out << "Compilation error in " << to_string(shaderType) << " shader \"" << name << "\":\n"
+        << "\"" << error << "\""
+        << io::endl;
 
     size_t lc = 1;
     char* shader = strdup(source);
@@ -271,6 +291,16 @@ void UTILS_NOINLINE OpenGLProgram::logCompilationError(
     }
 
     free(shader);
+}
+
+UTILS_NOINLINE
+void OpenGLProgram::logProgramLinkError(io::ostream& out, char const* name, GLuint program) noexcept {
+    char error[1024];
+    glGetProgramInfoLog(program, sizeof(error), nullptr, error);
+
+    out << "Link error in \"" << name << "\":\n"
+        << "\"" << error << "\""
+        << io::endl;
 }
 
 } // namespace filament

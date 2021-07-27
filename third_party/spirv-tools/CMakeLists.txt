@@ -59,6 +59,8 @@ elseif("${CMAKE_SYSTEM_NAME}" STREQUAL "Darwin")
   add_definitions(-DSPIRV_MAC)
 elseif("${CMAKE_SYSTEM_NAME}" STREQUAL "iOS")
   add_definitions(-DSPIRV_IOS)
+elseif("${CMAKE_SYSTEM_NAME}" STREQUAL "tvOS")
+  add_definitions(-DSPIRV_TVOS)
 elseif("${CMAKE_SYSTEM_NAME}" STREQUAL "Android")
   add_definitions(-DSPIRV_ANDROID)
   set(SPIRV_TIMER_ENABLED ${SPIRV_ALLOW_TIMERS})
@@ -94,7 +96,10 @@ endif(SPIRV_BUILD_COMPRESSION)
 
 option(SPIRV_BUILD_FUZZER "Build spirv-fuzz" OFF)
 
-option(SPIRV_WERROR "Enable error on warning" ON)
+# Filament specific changes
+# option(SPIRV_WERROR "Enable error on warning" ON)
+set(SPIRV_WERROR OFF)
+# End Filament specific changes
 if(("${CMAKE_CXX_COMPILER_ID}" MATCHES "GNU") OR (("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang") AND (NOT CMAKE_CXX_SIMULATE_ID STREQUAL "MSVC")))
   set(COMPILER_IS_LIKE_GNU TRUE)
 endif()

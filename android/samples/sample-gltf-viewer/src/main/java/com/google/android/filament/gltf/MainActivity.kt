@@ -24,6 +24,9 @@ import android.view.*
 import android.view.GestureDetector
 import android.widget.TextView
 import android.widget.Toast
+import com.google.android.filament.Fence
+import com.google.android.filament.IndirectLight
+import com.google.android.filament.Skybox
 import com.google.android.filament.utils.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -57,6 +60,9 @@ class MainActivity : Activity() {
     private var statusText: String? = null
     private var latestDownload: String? = null
     private val automation = AutomationEngine()
+    private var loadStartTime = 0L
+    private var loadStartFence: Fence? = null
+    private val viewerContent = AutomationEngine.ViewerContent()
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -71,6 +77,11 @@ class MainActivity : Activity() {
         doubleTapDetector = GestureDetector(applicationContext, doubleTapListener)
 
         modelViewer = ModelViewer(surfaceView)
+        viewerContent.view = modelViewer.view
+        viewerContent.sunlight = modelViewer.light
+        viewerContent.lightManager = modelViewer.engine.lightManager
+        viewerContent.scene = modelViewer.scene
+        viewerContent.renderer = modelViewer.renderer
 
         surfaceView.setOnTouchListener { _, event ->
             modelViewer.onTouchEvent(event)
@@ -78,27 +89,28 @@ class MainActivity : Activity() {
             true
         }
 
-        createRenderables()
+        createDefaultRenderables()
         createIndirectLight()
 
         setStatusText("To load a new model, go to the above URL on your host machine.")
 
-        val dynamicResolutionOptions = modelViewer.view.dynamicResolutionOptions
-        dynamicResolutionOptions.enabled = true
-        modelViewer.view.dynamicResolutionOptions = dynamicResolutionOptions
+        val view = modelViewer.view
+        view.dynamicResolutionOptions = view.dynamicResolutionOptions.apply {
+            enabled = true
+        }
 
-        val ssaoOptions = modelViewer.view.ambientOcclusionOptions
-        ssaoOptions.enabled = true
-        modelViewer.view.ambientOcclusionOptions = ssaoOptions
+        view.ambientOcclusionOptions = view.ambientOcclusionOptions.apply {
+            enabled = true
+        }
 
-        val bloomOptions = modelViewer.view.bloomOptions
-        bloomOptions.enabled = true
-        modelViewer.view.bloomOptions = bloomOptions
+        view.bloomOptions = view.bloomOptions.apply {
+            enabled = true
+        }
 
         remoteServer = RemoteServer(8082)
     }
 
-    private fun createRenderables() {
+    private fun createDefaultRenderables() {
         val buffer = assets.open("models/scene.gltf").use { input ->
             val bytes = ByteArray(input.available())
             input.read(bytes)
@@ -106,7 +118,7 @@ class MainActivity : Activity() {
         }
 
         modelViewer.loadModelGltfAsync(buffer) { uri -> readCompressedAsset("models/$uri") }
-        modelViewer.transformToUnitCube()
+        updateRootTransform()
     }
 
     private fun createIndirectLight() {
@@ -114,11 +126,12 @@ class MainActivity : Activity() {
         val scene = modelViewer.scene
         val ibl = "default_env"
         readCompressedAsset("envs/$ibl/${ibl}_ibl.ktx").let {
-            scene.indirectLight = KtxLoader.createIndirectLight(engine, it)
+            scene.indirectLight = KTXLoader.createIndirectLight(engine, it)
             scene.indirectLight!!.intensity = 30_000.0f
+            viewerContent.indirectLight = modelViewer.scene.indirectLight
         }
         readCompressedAsset("envs/$ibl/${ibl}_skybox.ktx").let {
-            scene.skybox = KtxLoader.createSkybox(engine, it)
+            scene.skybox = KTXLoader.createSkybox(engine, it)
         }
     }
 
@@ -151,7 +164,39 @@ class MainActivity : Activity() {
         withContext(Dispatchers.Main) {
             modelViewer.destroyModel()
             modelViewer.loadModelGlb(message.buffer)
-            modelViewer.transformToUnitCube()
+            updateRootTransform()
+            loadStartTime = System.nanoTime()
+            loadStartFence = modelViewer.engine.createFence()
+        }
+    }
+
+    private suspend fun loadHdr(message: RemoteServer.ReceivedMessage) {
+        withContext(Dispatchers.Main) {
+            val engine = modelViewer.engine
+            val equirect = HDRLoader.createTexture(engine, message.buffer)
+            if (equirect == null) {
+                setStatusText("Could not decode HDR file.")
+            } else {
+                setStatusText("Successfully decoded HDR file.")
+
+                val context = IBLPrefilterContext(engine)
+                val equirectToCubemap = IBLPrefilterContext.EquirectangularToCubemap(context)
+                val skyboxTexture = equirectToCubemap.run(equirect)!!
+                engine.destroyTexture(equirect)
+
+                val specularFilter = IBLPrefilterContext.SpecularFilter(context)
+                val reflections = specularFilter.run(skyboxTexture)
+
+                val ibl = IndirectLight.Builder()
+                         .reflections(reflections)
+                         .intensity(30000.0f)
+                         .build(engine)
+
+                val sky = Skybox.Builder().environment(skyboxTexture).build(engine)
+
+                modelViewer.scene.skybox = sky
+                modelViewer.scene.indirectLight = ibl
+            }
         }
     }
 
@@ -239,7 +284,9 @@ class MainActivity : Activity() {
                     pathToBufferMapping[path]
                 }
             }
-            modelViewer.transformToUnitCube()
+            updateRootTransform()
+            loadStartTime = System.nanoTime()
+            loadStartFence = modelViewer.engine.createFence()
         }
     }
 
@@ -256,6 +303,7 @@ class MainActivity : Activity() {
     override fun onDestroy() {
         super.onDestroy()
         choreographer.removeFrameCallback(frameScheduler)
+        remoteServer?.close()
     }
 
     fun loadModelData(message: RemoteServer.ReceivedMessage) {
@@ -265,6 +313,8 @@ class MainActivity : Activity() {
         CoroutineScope(Dispatchers.IO).launch {
             if (message.label.endsWith(".zip")) {
                 loadZip(message)
+            } else if (message.label.endsWith(".hdr")) {
+                loadHdr(message)
             } else {
                 loadGlb(message)
             }
@@ -273,17 +323,35 @@ class MainActivity : Activity() {
 
     fun loadSettings(message: RemoteServer.ReceivedMessage) {
         val json = StandardCharsets.UTF_8.decode(message.buffer).toString()
-        automation.applySettings(json, modelViewer.view, null,
-                modelViewer.scene.indirectLight, modelViewer.light, modelViewer.engine.lightManager,
-                modelViewer.scene, modelViewer.renderer)
-        modelViewer.view.colorGrading = automation.getColorGrading((modelViewer.engine))
+        viewerContent.assetLights = modelViewer.asset?.lightEntities
+        automation.applySettings(json, viewerContent)
+        modelViewer.view.colorGrading = automation.getColorGrading(modelViewer.engine)
         modelViewer.cameraFocalLength = automation.viewerOptions.cameraFocalLength
+        updateRootTransform()
+    }
+
+    private fun updateRootTransform() {
+        if (automation.viewerOptions.autoScaleEnabled) {
+            modelViewer.transformToUnitCube()
+        } else {
+            modelViewer.clearRootTransform()
+        }
     }
 
     inner class FrameCallback : Choreographer.FrameCallback {
         private val startTime = System.nanoTime()
         override fun doFrame(frameTimeNanos: Long) {
             choreographer.postFrameCallback(this)
+
+            loadStartFence?.let {
+                if (it.wait(Fence.Mode.FLUSH, 0) == Fence.FenceStatus.CONDITION_SATISFIED) {
+                    val end = System.nanoTime()
+                    val total = (end - loadStartTime) / 1_000_000
+                    Log.i(TAG, "The Filament backend took $total ms to load the model geometry.")
+                    modelViewer.engine.destroyFence(it)
+                    loadStartFence = null
+                }
+            }
 
             modelViewer.animator?.apply {
                 if (animationCount > 0) {
@@ -318,11 +386,11 @@ class MainActivity : Activity() {
         }
     }
 
-    // Just for testing purposes, this releases the model and reloads it.
+    // Just for testing purposes, this releases the current model and reloads the default model.
     inner class DoubleTapListener : GestureDetector.SimpleOnGestureListener() {
         override fun onDoubleTap(e: MotionEvent?): Boolean {
             modelViewer.destroyModel()
-            createRenderables()
+            createDefaultRenderables()
             return super.onDoubleTap(e)
         }
     }

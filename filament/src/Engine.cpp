@@ -32,6 +32,7 @@
 #include "details/RenderPrimitive.h"
 #include "details/Scene.h"
 #include "details/Skybox.h"
+#include "details/SkinningBuffer.h"
 #include "details/Stream.h"
 #include "details/SwapChain.h"
 #include "details/Texture.h"
@@ -174,6 +175,7 @@ FEngine::FEngine(Backend backend, Platform* platform, void* sharedGLContext) :
         mCameraManager(*this),
         mCommandBufferQueue(CONFIG_MIN_COMMAND_BUFFERS_SIZE, CONFIG_COMMAND_BUFFERS_SIZE),
         mPerRenderPassAllocator("per-renderpass allocator", CONFIG_PER_RENDER_PASS_ARENA_SIZE),
+        mJobSystem(getJobSystemThreadPoolSize()),
         mEngineEpoch(std::chrono::steady_clock::now()),
         mDriverBarrier(1),
         mMainThreadId(std::this_thread::get_id())
@@ -184,6 +186,14 @@ FEngine::FEngine(Backend backend, Platform* platform, void* sharedGLContext) :
 
     slog.i << "FEngine (" << sizeof(void*) * 8 << " bits) created at " << this << " "
            << "(threading is " << (UTILS_HAS_THREADING ? "enabled)" : "disabled)") << io::endl;
+}
+
+uint32_t FEngine::getJobSystemThreadPoolSize() noexcept {
+    // 1 thread for the user, 1 thread for the backend
+    int threadCount = std::thread::hardware_concurrency() - 2;
+    // make sure we have at least 1 thread though
+    threadCount = std::max(1, threadCount);
+    return threadCount;
 }
 
 /*
@@ -321,6 +331,7 @@ void FEngine::shutdown() {
 
     cleanupResourceList(mBufferObjects);
     cleanupResourceList(mIndexBuffers);
+    cleanupResourceList(mSkinningBuffers);
     cleanupResourceList(mVertexBuffers);
     cleanupResourceList(mTextures);
     cleanupResourceList(mRenderTargets);
@@ -388,14 +399,10 @@ void FEngine::gc() {
     auto *parent = js.createJob();
     auto em = std::ref(mEntityManager);
 
-    js.run(jobs::createJob(js, parent, &FRenderableManager::gc, &mRenderableManager, em),
-            JobSystem::DONT_SIGNAL);
-    js.run(jobs::createJob(js, parent, &FLightManager::gc, &mLightManager, em),
-            JobSystem::DONT_SIGNAL);
-    js.run(jobs::createJob(js, parent, &FTransformManager::gc, &mTransformManager, em),
-            JobSystem::DONT_SIGNAL);
-    js.run(jobs::createJob(js, parent, &FCameraManager::gc, &mCameraManager, em),
-            JobSystem::DONT_SIGNAL);
+    js.run(jobs::createJob(js, parent, &FRenderableManager::gc, &mRenderableManager, em));
+    js.run(jobs::createJob(js, parent, &FLightManager::gc, &mLightManager, em));
+    js.run(jobs::createJob(js, parent, &FTransformManager::gc, &mTransformManager, em));
+    js.run(jobs::createJob(js, parent, &FCameraManager::gc, &mCameraManager, em));
 
     js.runAndWait(parent);
 }
@@ -560,6 +567,10 @@ FIndexBuffer* FEngine::createIndexBuffer(const IndexBuffer::Builder& builder) no
     return create(mIndexBuffers, builder);
 }
 
+FSkinningBuffer* FEngine::createSkinningBuffer(const SkinningBuffer::Builder& builder) noexcept {
+    return create(mSkinningBuffers, builder);
+}
+
 FTexture* FEngine::createTexture(const Texture::Builder& builder) noexcept {
     return create(mTextures, builder);
 }
@@ -602,8 +613,8 @@ FRenderer* FEngine::createRenderer() noexcept {
 }
 
 FMaterialInstance* FEngine::createMaterialInstance(const FMaterial* material,
-        const char* name) noexcept {
-    FMaterialInstance* p = mHeapAllocator.make<FMaterialInstance>(*this, material, name);
+        const FMaterialInstance* other, const char* name) noexcept {
+    FMaterialInstance* p = mHeapAllocator.make<FMaterialInstance>(*this, other, name);
     if (p) {
         auto pos = mMaterialInstances.emplace(material, "MaterialInstance");
         pos.first->second.insert(p);
@@ -740,6 +751,10 @@ bool FEngine::destroy(const FVertexBuffer* p) {
 
 bool FEngine::destroy(const FIndexBuffer* p) {
     return terminateAndDestroy(p, mIndexBuffers);
+}
+
+bool FEngine::destroy(const FSkinningBuffer* p) {
+    return terminateAndDestroy(p, mSkinningBuffers);
 }
 
 inline bool FEngine::destroy(const FRenderer* p) {
@@ -899,6 +914,10 @@ Backend Engine::getBackend() const noexcept {
     return upcast(this)->getBackend();
 }
 
+Platform* Engine::getPlatform() const noexcept {
+    return upcast(this)->getPlatform();
+}
+
 Renderer* Engine::createRenderer() noexcept {
     return upcast(this)->createRenderer();
 }
@@ -1007,6 +1026,10 @@ void Engine::flushAndWait() {
     upcast(this)->flushAndWait();
 }
 
+void Engine::flush() {
+    upcast(this)->flush();
+}
+
 utils::EntityManager& Engine::getEntityManager() noexcept {
     return upcast(this)->getEntityManager();
 }
@@ -1041,16 +1064,6 @@ utils::JobSystem& Engine::getJobSystem() noexcept {
 
 DebugRegistry& Engine::getDebugRegistry() noexcept {
     return upcast(this)->getDebugRegistry();
-}
-
-Camera* Engine::createCamera() noexcept {
-    return createCamera(upcast(this)->getEntityManager().create());
-}
-
-void Engine::destroy(const Camera* camera) {
-    Entity e = camera->getEntity();
-    destroyCameraComponent(e);
-    upcast(this)->getEntityManager().destroy(e);
 }
 
 } // namespace filament

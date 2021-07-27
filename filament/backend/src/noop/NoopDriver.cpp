@@ -73,9 +73,6 @@ void NoopDriver::flush(int) {
 void NoopDriver::finish(int) {
 }
 
-void NoopDriver::destroyUniformBuffer(Handle<HwUniformBuffer> ubh) {
-}
-
 void NoopDriver::destroyRenderPrimitive(Handle<HwRenderPrimitive> rph) {
 }
 
@@ -167,12 +164,12 @@ bool NoopDriver::isFrameTimeSupported() {
     return true;
 }
 
-bool NoopDriver::areFeedbackLoopsSupported() {
-    return true;
-}
-
 math::float2 NoopDriver::getClipSpaceParams() {
     return math::float2{ -1.0f, 0.0f };
+}
+
+uint8_t NoopDriver::getMaxDrawBuffers() {
+    return backend::MRT::MAX_SUPPORTED_RENDER_TARGET_COUNT;
 }
 
 void NoopDriver::updateIndexBuffer(Handle<HwIndexBuffer> ibh, BufferDescriptor&& p,
@@ -185,7 +182,7 @@ void NoopDriver::updateBufferObject(Handle<HwBufferObject> ibh, BufferDescriptor
     scheduleDestroy(std::move(p));
 }
 
-void NoopDriver::setVertexBufferObject(Handle<HwVertexBuffer> vbh, size_t index,
+void NoopDriver::setVertexBufferObject(Handle<HwVertexBuffer> vbh, uint32_t index,
         Handle<HwBufferObject> boh) {
 }
 
@@ -227,7 +224,7 @@ SyncStatus NoopDriver::getSyncStatus(Handle<HwSync> sh) {
 void NoopDriver::setExternalImage(Handle<HwTexture> th, void* image) {
 }
 
-void NoopDriver::setExternalImagePlane(Handle<HwTexture> th, void* image, size_t plane) {
+void NoopDriver::setExternalImagePlane(Handle<HwTexture> th, void* image, uint32_t plane) {
 }
 
 void NoopDriver::setExternalStream(Handle<HwTexture> th, Handle<HwStream> sh) {
@@ -237,10 +234,6 @@ void NoopDriver::generateMipmaps(Handle<HwTexture> th) { }
 
 bool NoopDriver::canGenerateMipmaps() {
     return true;
-}
-
-void NoopDriver::loadUniformBuffer(Handle<HwUniformBuffer> ubh, BufferDescriptor&& data) {
-    scheduleDestroy(std::move(data));
 }
 
 void NoopDriver::updateSamplerGroup(Handle<HwSamplerGroup> sbh,
@@ -271,20 +264,20 @@ void NoopDriver::makeCurrent(Handle<HwSwapChain> drawSch, Handle<HwSwapChain> re
 void NoopDriver::commit(Handle<HwSwapChain> sch) {
 }
 
-void NoopDriver::bindUniformBuffer(size_t index, Handle<HwUniformBuffer> ubh) {
+void NoopDriver::bindUniformBuffer(uint32_t index, Handle<HwBufferObject> ubh) {
 }
 
-void NoopDriver::bindUniformBufferRange(size_t index, Handle<HwUniformBuffer> ubh,
-        size_t offset, size_t size) {
+void NoopDriver::bindUniformBufferRange(uint32_t index, Handle<HwBufferObject> ubh,
+        uint32_t offset, uint32_t size) {
 }
 
-void NoopDriver::bindSamplers(size_t index, Handle<HwSamplerGroup> sbh) {
+void NoopDriver::bindSamplers(uint32_t index, Handle<HwSamplerGroup> sbh) {
 }
 
-void NoopDriver::insertEventMarker(char const* string, size_t len) {
+void NoopDriver::insertEventMarker(char const* string, uint32_t len) {
 }
 
-void NoopDriver::pushGroupMarker(char const* string,  size_t len) {
+void NoopDriver::pushGroupMarker(char const* string,  uint32_t len) {
 }
 
 void NoopDriver::popGroupMarker(int) {

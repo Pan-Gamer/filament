@@ -38,9 +38,9 @@ inline bool operator==(const backend::SamplerParams& lhs, const backend::Sampler
 namespace metal {
 
 static constexpr uint32_t MAX_VERTEX_ATTRIBUTE_COUNT = backend::MAX_VERTEX_ATTRIBUTE_COUNT;
-static constexpr uint32_t SAMPLER_GROUP_COUNT = Program::UNIFORM_BINDING_COUNT;
+static constexpr uint32_t SAMPLER_GROUP_COUNT = Program::BINDING_COUNT;
 static constexpr uint32_t SAMPLER_BINDING_COUNT = backend::MAX_SAMPLER_COUNT;
-static constexpr uint32_t VERTEX_BUFFER_START = Program::UNIFORM_BINDING_COUNT;
+static constexpr uint32_t VERTEX_BUFFER_START = Program::BINDING_COUNT;
 
 // The "zero" buffer is a small buffer for missing attributes that resides in the vertex slot
 // immediately following any user-provided vertex buffers.
@@ -216,7 +216,7 @@ struct PipelineState {
     id<MTLFunction> vertexFunction = nil;                                      // 8 bytes
     id<MTLFunction> fragmentFunction = nil;                                    // 8 bytes
     VertexDescription vertexDescription;                                       // 528 bytes
-    MTLPixelFormat colorAttachmentPixelFormat[MRT::MAX_SUPPORTED_RENDER_TARGET_COUNT] = { MTLPixelFormatInvalid };  // 32 bytes
+    MTLPixelFormat colorAttachmentPixelFormat[MRT::MAX_SUPPORTED_RENDER_TARGET_COUNT] = { MTLPixelFormatInvalid };  // 64 bytes
     MTLPixelFormat depthAttachmentPixelFormat = MTLPixelFormatInvalid;         // 8 bytes
     NSUInteger sampleCount = 1;                                                // 8 bytes
     BlendState blendState;                                                     // 56 bytes
@@ -244,7 +244,7 @@ struct PipelineState {
 
 // This assert checks that the struct is the size we expect without any "hidden" padding bytes
 // inserted by the compiler.
-static_assert(sizeof(PipelineState) == 656, "PipelineState unexpected size.");
+static_assert(sizeof(PipelineState) == 688, "PipelineState unexpected size.");
 
 struct PipelineStateCreator {
     id<MTLRenderPipelineState> operator()(id<MTLDevice> device, const PipelineState& state)
@@ -289,15 +289,17 @@ using DepthStencilStateCache = StateCache<DepthStencilState, id<MTLDepthStencilS
 
 // Uniform buffers
 
+class MetalBuffer;
+
 struct UniformBufferState {
-    uint64_t offset = 0;            // 8 bytes
-    Handle<HwUniformBuffer> ubh;    // 4 bytes
+    MetalBuffer* buffer = nullptr;  // 8 bytes
+    uint32_t offset = 0;            // 4 bytes
     bool bound = false;             // 1 byte
     char padding[3] = { 0 };        // 3 bytes
 
     bool operator==(const UniformBufferState& rhs) const noexcept {
         return this->bound == rhs.bound &&
-               this->ubh.getId() == rhs.ubh.getId() &&
+               this->buffer == rhs.buffer &&
                this->offset == rhs.offset;
     }
 

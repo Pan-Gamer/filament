@@ -388,7 +388,7 @@ public:
      * @param entity An entity.
      * @return A pointer to the Camera component for this entity or nullptr if the entity didn't
      *         have a Camera component. The pointer is valid until destroyCameraComponent()
-     *         (or destroyCamera()) is called or the entity itself is destroyed.
+     *         is called or the entity itself is destroyed.
      */
     Camera* getCameraComponent(utils::Entity entity) noexcept;
 
@@ -445,6 +445,8 @@ public:
      */
     void flushAndWait();
 
+    void flush();
+
     /**
      * Returns the default Material.
      *
@@ -460,6 +462,32 @@ public:
     Backend getBackend() const noexcept;
 
     /**
+     * Returns the Platform object that belongs to this Engine.
+     *
+     * When Engine::create is called with no platform argument, Filament creates an appropriate
+     * Platform subclass automatically. The specific subclass created depends on the backend and
+     * OS. For example, when the OpenGL backend is used, the Platform object will be a descendant of
+     * OpenGLPlatform.
+     *
+     * dynamic_cast should be used to cast the returned Platform object into a specific subclass.
+     * Note that RTTI must be available to use dynamic_cast.
+     *
+     * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     * Platform* platform = engine->getPlatform();
+     * // static_cast also works, but more dangerous.
+     * SpecificPlatform* specificPlatform = dynamic_cast<SpecificPlatform*>(platform);
+     * specificPlatform->platformSpecificMethod();
+     * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+     *
+     * When a custom Platform is passed to Engine::create, Filament will use it instead, and this
+     * method will return it.
+     *
+     * @return A pointer to the Platform object that was provided to Engine::create, or the
+     * Filament-created one.
+     */
+    Platform* getPlatform() const noexcept;
+
+    /**
      * Allocate a small amount of memory directly in the command stream. The allocated memory is
      * guaranteed to be preserved until the current command buffer is executed
      *
@@ -471,26 +499,6 @@ public:
      *       the current command buffer is executed.
      */
     void* streamAlloc(size_t size, size_t alignment = alignof(double)) noexcept;
-
-
-    /**
-     * helper for creating an Entity and Camera component in one call
-     *
-     * @deprecated use createCamera(Entity) instead
-     *
-     * @return A camera component
-     */
-    UTILS_DEPRECATED
-    Camera* createCamera() noexcept;
-
-    /**
-     * helper for destroying the Camera component and its Entity in one call
-     *
-     * @param camera Camera component to destroy. The associated entity is also destroyed.
-     * @deprecated use destroyCameraComponent(Entity) instead
-     */
-    UTILS_DEPRECATED
-    void destroy(const Camera* camera);
 
     /**
       * Invokes one iteration of the render loop, used only on single-threaded platforms.

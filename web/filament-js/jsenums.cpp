@@ -72,7 +72,7 @@ enum_<VertexAttribute>("VertexAttribute")
     .value("MORPH_TANGENTS_3", MORPH_TANGENTS_3);
 
 enum_<BufferObject::BindingType>("BufferObject$BindingType")
-    .value("VERTEX_BINDING", BufferObject::BindingType::VERTEX);
+    .value("VERTEX", BufferObject::BindingType::VERTEX);
 
 enum_<VertexBuffer::AttributeType>("VertexBuffer$AttributeType")
     .value("BYTE", VertexBuffer::AttributeType::BYTE)
@@ -164,8 +164,6 @@ enum_<ColorGrading::ToneMapping>("ColorGrading$ToneMapping")
     .value("ACES_LEGACY", ColorGrading::ToneMapping::ACES_LEGACY)
     .value("ACES", ColorGrading::ToneMapping::ACES)
     .value("FILMIC", ColorGrading::ToneMapping::FILMIC)
-    .value("EVILS", ColorGrading::ToneMapping::EVILS)
-    .value("REINHARD", ColorGrading::ToneMapping::REINHARD)
     .value("DISPLAY_RANGE", ColorGrading::ToneMapping::DISPLAY_RANGE);
 
 enum_<Frustum::Plane>("Frustum$Plane")

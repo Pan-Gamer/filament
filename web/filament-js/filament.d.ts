@@ -102,7 +102,6 @@ export interface View$AmbientOcclusionOptions {
 }
 
 export interface View$DepthOfFieldOptions {
-    focusDistance?: number;
     cocScale?: number;
     maxApertureDiameter?: number;
     enabled?: boolean;
@@ -614,6 +613,7 @@ export class gltfio$FilamentAsset {
     public getResourceUris(): Vector<string>;
     public getBoundingBox(): Aabb;
     public getName(entity: Entity): string;
+    public getExtras(entity: Entity): string;
     public getAnimator(): gltfio$Animator;
     public getWireframe(): Entity;
     public getEngine(): Engine;
@@ -621,6 +621,7 @@ export class gltfio$FilamentAsset {
 }
 
 export class gltfio$FilamentInstance {
+    public getAsset(): gltfio$FilamentAsset;
     public getEntities(): Vector<Entity>;
     public getRoot(): Entity;
     public getAnimator(): gltfio$Animator;
@@ -738,7 +739,7 @@ export enum IndexBuffer$IndexType {
 }
 
 export enum BufferObject$BindingType {
-    VERTEX_BINDING,
+    VERTEX,
 }
 
 export enum LightManager$Type {
@@ -991,10 +992,6 @@ export enum VertexAttribute {
     MORPH_TANGENTS_1 = CUSTOM5,
     MORPH_TANGENTS_2 = CUSTOM6,
     MORPH_TANGENTS_3 = CUSTOM7,
-}
-
-export enum BufferObject$BindingType {
-    VERTEX,
 }
 
 export enum VertexBuffer$AttributeType {

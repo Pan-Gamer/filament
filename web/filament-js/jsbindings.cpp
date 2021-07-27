@@ -364,10 +364,11 @@ value_object<filament::View::AmbientOcclusionOptions>("View$AmbientOcclusionOpti
     .field("bias", &filament::View::AmbientOcclusionOptions::bias)
     .field("resolution", &filament::View::AmbientOcclusionOptions::resolution)
     .field("intensity", &filament::View::AmbientOcclusionOptions::intensity)
+    .field("bilateralThreshold", &filament::View::AmbientOcclusionOptions::bilateralThreshold)
     .field("quality", &filament::View::AmbientOcclusionOptions::quality);
+    // TODO: ssct options
 
 value_object<filament::View::DepthOfFieldOptions>("View$DepthOfFieldOptions")
-    .field("focusDistance", &filament::View::DepthOfFieldOptions::focusDistance)
     .field("cocScale", &filament::View::DepthOfFieldOptions::cocScale)
     .field("maxApertureDiameter", &filament::View::DepthOfFieldOptions::maxApertureDiameter)
     .field("enabled", &filament::View::DepthOfFieldOptions::enabled)
@@ -388,7 +389,16 @@ value_object<filament::View::BloomOptions>("View$BloomOptions")
     .field("threshold", &filament::View::BloomOptions::threshold)
     .field("enabled", &filament::View::BloomOptions::enabled)
     .field("blendMode", &filament::View::BloomOptions::blendMode)
-    .field("highlight", &filament::View::BloomOptions::highlight);
+    .field("highlight", &filament::View::BloomOptions::highlight)
+    .field("lensFlare", &filament::View::BloomOptions::lensFlare)
+    .field("starburst", &filament::View::BloomOptions::starburst)
+    .field("chromaticAberration", &filament::View::BloomOptions::chromaticAberration)
+    .field("ghostCount", &filament::View::BloomOptions::ghostCount)
+    .field("ghostSpacing", &filament::View::BloomOptions::ghostSpacing)
+    .field("ghostThreshold", &filament::View::BloomOptions::ghostThreshold)
+    .field("haloThickness", &filament::View::BloomOptions::haloThickness)
+    .field("haloRadius", &filament::View::BloomOptions::haloRadius)
+    .field("haloThreshold", &filament::View::BloomOptions::haloThreshold);
 
 // TODO: add support for dirt texture in BloomOptions.
 // Note that simply including the field in the above list causes binding errors for nullptr.
@@ -1796,17 +1806,20 @@ class_<FilamentAsset>("gltfio$FilamentAsset")
     .function("getName", EMBIND_LAMBDA(std::string, (FilamentAsset* self, utils::Entity entity), {
         return std::string(self->getName(entity));
     }), allow_raw_pointers())
+    .function("getExtras", EMBIND_LAMBDA(std::string, (FilamentAsset* self, utils::Entity entity), {
+        return std::string(self->getExtras(entity));
+    }), allow_raw_pointers())
     .function("getAnimator", &FilamentAsset::getAnimator, allow_raw_pointers())
     .function("getWireframe", &FilamentAsset::getWireframe)
     .function("getEngine", &FilamentAsset::getEngine, allow_raw_pointers())
     .function("releaseSourceData", &FilamentAsset::releaseSourceData);
 
 class_<FilamentInstance>("gltfio$FilamentInstance")
+    .function("getAsset", &FilamentInstance::getAsset, allow_raw_pointers())
     .function("getEntities", EMBIND_LAMBDA(EntityVector, (FilamentInstance* self), {
         const utils::Entity* ptr = self->getEntities();
         return EntityVector(ptr, ptr + self->getEntityCount());
     }), allow_raw_pointers())
-
     .function("getRoot", &FilamentInstance::getRoot)
     .function("getAnimator", &FilamentInstance::getAnimator, allow_raw_pointers());
 

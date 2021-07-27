@@ -30,6 +30,7 @@
 #include <viewer/Settings.h>
 
 #include <utils/Entity.h>
+#include <utils/compiler.h>
 
 #include <math/mat4.h>
 #include <math/vec3.h>
@@ -50,7 +51,7 @@ namespace viewer {
  * \note If you don't need ImGui controls, there is no need to use this class, just use AssetLoader
  * instead.
  */
-class SimpleViewer {
+class UTILS_PUBLIC SimpleViewer {
 public:
     using Animator = gltfio::Animator;
     using FilamentAsset = gltfio::FilamentAsset;
@@ -73,18 +74,15 @@ public:
     ~SimpleViewer();
 
     /**
-     * Adds the asset's ready-to-render entities into the scene and optionally transforms the root
-     * node to make it fit into a unit cube at the origin.
+     * Adds the asset's ready-to-render entities into the scene.
      *
      * The viewer does not claim ownership over the asset or its entities. Clients should use
      * AssetLoader and ResourceLoader to load an asset before passing it in.
      *
      * @param asset The asset to view.
-     * @param scale Adds a transform to the root to fit the asset into a unit cube at the origin.
      * @param instanceToAnimate Optional instance from which to get the animator.
      */
-    void populateScene(FilamentAsset* asset, bool scale,
-            FilamentInstance* instanceToAnimate = nullptr);
+    void populateScene(FilamentAsset* asset, FilamentInstance* instanceToAnimate = nullptr);
 
     /**
      * Removes the current asset from the viewer.
@@ -201,6 +199,11 @@ public:
     void setIBLIntensity(float brightness) { mSettings.lighting.iblIntensity = brightness; }
 
     /**
+     * Updates the transform at the root node according to the autoScaleEnabled setting.
+     */
+    void updateRootTransform();
+
+    /**
      * Gets a modifiable reference to stashed state.
      */
     Settings& getSettings() { return mSettings; }
@@ -240,10 +243,12 @@ private:
     int mCurrentCamera = 0;
 
     // Color grading UI state.
+    float mToneMapPlot[1024];
     float mRangePlot[1024 * 3];
     float mCurvePlot[1024 * 3];
 };
 
+UTILS_PUBLIC
 filament::math::mat4f fitIntoUnitCube(const filament::Aabb& bounds, float zoffset);
 
 } // namespace viewer

@@ -84,11 +84,12 @@ public:
     ~FScene() noexcept;
     void terminate(FEngine& engine);
 
-    void prepare(const math::mat4f& worldOriginTransform);
-    void prepareDynamicLights(const CameraInfo& camera, ArenaScope& arena, backend::Handle<backend::HwUniformBuffer> lightUbh) noexcept;
+    void prepare(const math::mat4f& worldOriginTransform, bool shadowReceiversAreCasters) noexcept;
+    void prepareDynamicLights(const CameraInfo& camera, ArenaScope& arena,
+            backend::Handle<backend::HwBufferObject> lightUbh) noexcept;
 
 
-    filament::backend::Handle<backend::HwUniformBuffer> getRenderableUBO() const noexcept {
+    filament::backend::Handle<backend::HwBufferObject> getRenderableUBO() const noexcept {
         return mRenderableViewUbh;
     }
 
@@ -103,7 +104,7 @@ public:
         WORLD_TRANSFORM,        // 16 | instance of the Transform component
         REVERSED_WINDING_ORDER, //  1 | det(WORLD_TRANSFORM)<0
         VISIBILITY_STATE,       //  1 | visibility data of the component
-        BONES_UBH,              //  4 | bones uniform buffer handle
+        SKINNING_BUFFER,        //  8 | bones uniform buffer handle, count, offset
         WORLD_AABB_CENTER,      // 12 | world-space bounding box center of the renderable
         VISIBLE_MASK,           //  1 | each bit represents a visibility in a pass
         MORPH_WEIGHTS,          //  4 | floats for morphing
@@ -115,6 +116,9 @@ public:
         // These are temporaries and should be stored out of line
         PRIMITIVES,             //  8 | level-of-detail'ed primitives
         SUMMED_PRIMITIVE_COUNT, //  4 | summed visible primitive counts
+
+        // FIXME: We need a better way to handle this
+        USER_DATA,              //  4 | user data currently used to store the scale
     };
 
     using RenderableSoa = utils::StructureOfArrays<
@@ -122,14 +126,16 @@ public:
             math::mat4f,                                // WORLD_TRANSFORM
             bool,                                       // REVERSED_WINDING_ORDER
             FRenderableManager::Visibility,             // VISIBILITY_STATE
-            backend::Handle<backend::HwUniformBuffer>,  // BONES_UBH
+            FRenderableManager::SkinningBindingInfo,    // SKINNING_BUFFER
             math::float3,                               // WORLD_AABB_CENTER
             VisibleMaskType,                            // VISIBLE_MASK
             math::float4,                               // MORPH_WEIGHTS
             uint8_t,                                    // LAYERS
             math::float3,                               // WORLD_AABB_EXTENT
             utils::Slice<FRenderPrimitive>,             // PRIMITIVES
-            uint32_t                                    // SUMMED_PRIMITIVE_COUNT
+            uint32_t,                                   // SUMMED_PRIMITIVE_COUNT
+            // FIXME: We need a better way to handle this
+            float                                       // USER_DATA
     >;
 
     RenderableSoa const& getRenderableData() const noexcept { return mRenderableData; }
@@ -197,16 +203,13 @@ public:
     LightSoa const& getLightData() const noexcept { return mLightData; }
     LightSoa& getLightData() noexcept { return mLightData; }
 
-    void updateUBOs(utils::Range<uint32_t> visibleRenderables, backend::Handle<backend::HwUniformBuffer> renderableUbh) noexcept;
+    void updateUBOs(utils::Range<uint32_t> visibleRenderables, backend::Handle<backend::HwBufferObject> renderableUbh) noexcept;
 
     bool hasContactShadows() const noexcept;
 
 private:
     static inline void computeLightRanges(math::float2* zrange,
             CameraInfo const& camera, const math::float4* spheres, size_t count) noexcept;
-
-    static inline void computeLightCameraPlaneDistances(float* distances,
-            const CameraInfo& camera, const math::float4* spheres, size_t count) noexcept;
 
     FEngine& mEngine;
     FSkybox* mSkybox = nullptr;
@@ -228,7 +231,7 @@ private:
      */
     RenderableSoa mRenderableData;
     LightSoa mLightData;
-    backend::Handle<backend::HwUniformBuffer> mRenderableViewUbh; // This is actually owned by the view.
+    backend::Handle<backend::HwBufferObject> mRenderableViewUbh; // This is actually owned by the view.
     bool mHasContactShadows = false;
 };
 

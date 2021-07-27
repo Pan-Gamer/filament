@@ -3,11 +3,158 @@
 This file contains one line summaries of commits that are worthy of mentioning in release notes.
 A new header is inserted each time a *tag* is created.
 
-## Next release (main branch)
+## v1.11.3 (currently main branch)
+
+## v1.11.2
+
+- engine: New API: `ColorGrading::Builder::toneMapper(const ToneMapper*)`.
+- engine: New tone mapper: `GenericToneMapper`, a configurable tone mapper.
+- engine: `ColorGrading::Builder::toneMapping(ColorGrading::ToneMapping)` is now deprecated.
+- engine: Removed `REINHARD` tonemap operator[⚠️ **API Change**].
+
+## v1.11.1
+
+- engine: Luminance scaling can now be used with any tone mapping operator. It was previously tied
+  to the "EVILS" tone mapping operator.
+- engine: Removed the "EVILS" tone mapping operator [⚠️ **API Change**].
+- engine: Improvements to Skinning. A new `SkinningBuffer` API allows bone sharing between
+  renderables.
+- engine: Improvements to internal memory allocation for Metal and Vulkan backends.
+- engine: Default to OpenGL backend when Windows does not support Vulkan.
+- samples: Add new sample app: image_viewer.
+
+## v1.11.0
+
+- engine: Added support for transparent shadows. Add `transparentShadow : true` in the material file.
+- engine: honor user-defined precision in material files for non-samplers, rename `SamplerPrecision`
+  to `ParameterPrecicion`. [⚠️ **API Change**]
+- engine: Work around Qualcomm issue with point lights.
+- engine: Allow MSAA when post-processing is disabled.
+- engine: enable up to 6 spot-light shadows.
+- gltfio: Added support for `KHR_materials_volume`.
+- gltfio: fix precision in KHR_texture_transform.
+- java: Removed support for Java desktop targets (macOS, Linux, and Windows) [⚠️ **API Change**].
+
+## v1.10.7
+
+- engine: Spot-light position calculation moved to fragment shader.
+- engine: Small shadow mapping fixes and improvements.
+- gltfio: Add fast path for native material providers.
+- gltfio: Allow Java / Kotlin clients to customize MaterialProvider.
+- engine: Fix out of bounds access with `RenderTarget` java bindings.
+- Metal: `TextureFormat::DEPTH24_STENCIL8` now maps to a 32 bit depth format on iOS.
+
+## v1.10.6
+
+- engine: Use exponential VSM and improve VSM user settings [⚠️ **Recompile Materials for VSM**].
+- engine: Optional blurring of VSM shadowmaps.
+- engine: Fix a crash when using lens flares.
+- engine: Fix backend crashes when using an unsupported sample count.
+- gltfio: Add new `getAsset`API to `FilamentInstance`.
+- gltfio: Introduce support for extras strings.
+- OpenGL: Increase OpenGL backend handle arena from 2 to 4 MiB.
+- Vulkan: Fix Texture swizzle support.
+
+## v1.10.5
+
+- android: AAR libraries now properly include their ProGuard rules.
+- engine: User materials can now provide custom lighting/surface shading, please consult
+  the [materials documentation](https://google.github.io/filament/Materials.html) for details.
+- engine: `Backend::DEFAULT` now selects the most appropriate backend for the platform, rather than
+  always `OPENGL`. On Android the default is `OPENGL`, on Apple platforms the default is `METAL` and
+  on all other platforms that default is `VULKAN`.
+- engine: Fix a potential memory corruption when using more than 4 render targets.
+- engine: Fix a possible crash when bloom is enabled.
+- engine: Fix and refactor support for S3TC + SRGB with OpenGL.
+- engine: Fix automatic clearing of rendertargets.
+- engine: Fix imported render target discard and clear flags.
+- engine: Fix opaque blit with imported render targets.
+
+## v1.10.4
+
+- engine: improvements to internal job system.
+- Vulkan: performance improvements on Mali.
+- gltfio: improvements to load time for large models.
+- WebGL: remove bogus stride argument, fix `BindingType` TypeScript definition.
+
+## v1.10.3
+
+- android: use `debug.filament.backend` system property to select the desired backend.
+- engine: fix `LightManager::getFalloff`.
+- gltfio: fix crash with non-triangles.
+- macOS: fix main thread checker warnings with OpenGL.
+- vulkan: fix crash on Windows machines with NVIDIA GPUs.
+
+## v1.10.2
+
+- Vulkan: validation and diagnostic improvements
+- engine: improvements for scenes with many renderables.
+- gltfio: added support for `KHR_materials_ior`.
+- java: Add bindings for `IBLPrefilterContext`.
+- java: add `KTXLoader.getSphericalHarmonics` JNI binding
+- libimage: fix, respect sRGB option for compressed formats.
+- sample-gltf-viewer: fix lifetime cycle for RemoteServer.
+
+## v1.10.1
+
+- engine: Add `getPlatform` API to Engine.
+- engine: Add a new cone angles API to `LightManager`.
+- engine: Attachments of custom RendereTargets are not systematically discarded.
+- engine: Fix a crash when using custom rendertargets.
+- engine: New API to duplicate a `MaterialInstance`.
+- filagui: fix support for custom images in ImGuiHelper.
+- java: Add bindings for HDRLoader.
+
+## v1.10.0
+
+- engine: User materials can now use 9 samplers instead of 8 [⚠️ **Material breakage**].
+- engine: Remove `populateTangentQuaternions`  [⚠️ **API change**].
+- engine: Deprecate `Stream::Builder::stream(intptr_t)` [⚠️ **API Change**].
+- engine: Remove deprecated APIs: `Camera::setScaling`, `Engine::destroy(Camera*)`,
+  `Engine::createCamera`, `Renderer::beginFrame(SwapChain*, uint64_t,
+  backend::FrameScheduledCallback, void*)`, and `View::setShadowsEnabled` [⚠️ **API Change**].
+- engine: Remove `focusDistance` from `View::BloomOptions` [⚠️ **API Change**].
+- engine: Add a `FILAMENT_SUPPORTS_OPENGL` CMake option to enable/disable OpenGL support.
+- Vulkan: fixes and improvements for large scenes.
+- gltfio: fix morphing bugs uncovered by MorphStressTest.
+- Java: add API for `Texture::Builder::import()`.
+- WebGL: Fix a potential INVALID_OPERATION.
+
+## v1.9.25
+
+- NEW API: Screen-space lens flare effect.
+- engine: Fix several memory leaks in the GL backend.
+- Vulkan: General bug fixes and improvements.
+- Vulkan: Fix some problems seen on Mali devices.
+- ios: Fix VSM shadows not working.
+- webgl: Fix black screen seen with some samples.
+
+## v1.9.24
+
+- engine: Fix memory leaks in OpenGL driver.
+- engine: new experimental tone mapper, `EVILS` (name will most likely change).
+- engine: Improvements to Vulkan backend.
+- engine: Fix incorrect units documented for `LightManager.getIntensity`.
+- engine: fix high quality upsampling for SSAO.
+- engine: implement accurate normal reconstruction for SSAO.
+- engine: improve LOW and HIGH quality levels for SSAO.
+- libs: improvements to `libiblprefilter`.
+- materials: New `quality` property.
+- samples: Add new gltf-viewer iOS sample.
+- samples: clear the background in lightbulb sample.
 
 ## v1.9.23
 
+- Vulkan: various fixes.
+- android: fix crash seen using VSM with MSAA on Adreno devices.
+- engine: Add `Engine::getEntityManager()`.
+- engine: Fix desktop crash seen with some GPU drivers.
+- engine: improve importance sampling.
+- gltfio: robustness improvements for Draco meshes.
+- libs: Add new Transcoder API for C++ clients (part of `libgeometry`).
 - libs: New `iblprefilter` library to compute IBL pre-integration on the GPU using filament.
+- materials: Fix documentation for `getNormalizedViewportCoord`.
+- samples: fix rendertarget sample crash on launch.
 
 ## v1.9.22
 

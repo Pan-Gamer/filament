@@ -21,8 +21,6 @@
 
 #include "FilamentAPI-impl.h"
 
-#include <geometry/SurfaceOrientation.h>
-
 #include <math/quat.h>
 
 #include <utils/Panic.h>
@@ -192,8 +190,7 @@ FVertexBuffer::FVertexBuffer(FEngine& engine, const VertexBuffer::Builder& build
     FEngine::DriverApi& driver = engine.getDriverApi();
 
     mHandle = driver.createVertexBuffer(
-            mBufferCount, attributeCount, mVertexCount, attributeArray,
-            backend::BufferUsage::STATIC);
+            mBufferCount, attributeCount, mVertexCount, attributeArray);
 
     // If buffer objects are not enabled at the API level, then we create them internally.
     if (!mBufferObjectsEnabled) {
@@ -201,7 +198,7 @@ FVertexBuffer::FVertexBuffer(FEngine& engine, const VertexBuffer::Builder& build
         for (size_t i = 0; i < MAX_VERTEX_BUFFER_COUNT; ++i) {
             if (bufferSizes[i] > 0) {
                 BufferObjectHandle bo = driver.createBufferObject(bufferSizes[i],
-                        backend::BufferObjectBinding::VERTEX);
+                        backend::BufferObjectBinding::VERTEX, backend::BufferUsage::STATIC);
                 driver.setVertexBufferObject(mHandle, i, bo);
                 mBufferObjects[i] = bo;
             }
@@ -264,28 +261,6 @@ void VertexBuffer::setBufferAt(Engine& engine, uint8_t bufferIndex,
 void VertexBuffer::setBufferObjectAt(Engine& engine, uint8_t bufferIndex,
         BufferObject const* bufferObject) {
     upcast(this)->setBufferObjectAt(upcast(engine), bufferIndex, upcast(bufferObject));
-}
-
-void VertexBuffer::populateTangentQuaternions(const QuatTangentContext& ctx) {
-    auto* quats = geometry::SurfaceOrientation::Builder()
-        .vertexCount(ctx.quatCount)
-        .normals(ctx.normals, ctx.normalsStride)
-        .tangents(ctx.tangents, ctx.tangentsStride)
-        .build();
-
-    switch (ctx.quatType) {
-        case HALF4:
-            quats->getQuats((quath*) ctx.outBuffer, ctx.quatCount, ctx.outStride);
-            break;
-        case SHORT4:
-            quats->getQuats((short4*) ctx.outBuffer, ctx.quatCount, ctx.outStride);
-            break;
-        case FLOAT4:
-            quats->getQuats((quatf*) ctx.outBuffer, ctx.quatCount, ctx.outStride);
-            break;
-    }
-
-    delete quats;
 }
 
 } // namespace filament

@@ -19,7 +19,7 @@
 #include "components/LightManager.h"
 #include "components/RenderableManager.h"
 
-#include <private/filament/UibGenerator.h>
+#include <private/filament/UibStructs.h>
 
 #include "details/Engine.h"
 #include "details/IndirectLight.h"
@@ -28,6 +28,7 @@
 #include <utils/compiler.h>
 #include <utils/EntityManager.h>
 #include <utils/Range.h>
+#include <utils/Systrace.h>
 #include <utils/Zip2Iterator.h>
 
 #include <algorithm>
@@ -46,9 +47,11 @@ FScene::FScene(FEngine& engine) :
 FScene::~FScene() noexcept = default;
 
 
-void FScene::prepare(const mat4f& worldOriginTransform) {
+void FScene::prepare(const mat4f& worldOriginTransform, bool shadowReceiversAreCasters) noexcept {
     // TODO: can we skip this in most cases? Since we rely on indices staying the same,
     //       we could only skip, if nothing changed in the RCM.
+
+    SYSTRACE_CALL();
 
     FEngine& engine = mEngine;
     EntityManager& em = engine.getEntityManager();
@@ -116,20 +119,32 @@ void FScene::prepare(const mat4f& worldOriginTransform) {
             // compute the world AABB so we can perform culling
             const Box worldAABB = rigidTransform(rcm.getAABB(ri), worldTransform);
 
+            auto visibility = rcm.getVisibility(ri);
+            if (shadowReceiversAreCasters && visibility.receiveShadows) {
+                visibility.castShadows = true;
+            }
+
+            // FIXME: We compute and store the local scale because it's needed for glTF but
+            //        we need a better way to handle this
+            const mat4f& transform = tcm.getTransform(ti);
+            float scale = (length(transform[0].xyz) + length(transform[1].xyz) +
+                    length(transform[2].xyz)) / 3.0f;
+
             // we know there is enough space in the array
             sceneData.push_back_unsafe(
-                    ri,                       // RENDERABLE_INSTANCE
-                    worldTransform,           // WORLD_TRANSFORM
-                    reversedWindingOrder,     // REVERSED_WINDING_ORDER
-                    rcm.getVisibility(ri),    // VISIBILITY_STATE
-                    rcm.getBonesUbh(ri),      // BONES_UBH
-                    worldAABB.center,         // WORLD_AABB_CENTER
-                    0,                        // VISIBLE_MASK
-                    rcm.getMorphWeights(ri),  // MORPH_WEIGHTS
-                    rcm.getLayerMask(ri),     // LAYERS
-                    worldAABB.halfExtent,     // WORLD_AABB_EXTENT
-                    {},                       // PRIMITIVES
-                    0                         // SUMMED_PRIMITIVE_COUNT
+                    ri,                             // RENDERABLE_INSTANCE
+                    worldTransform,                 // WORLD_TRANSFORM
+                    reversedWindingOrder,           // REVERSED_WINDING_ORDER
+                    visibility,                     // VISIBILITY_STATE
+                    rcm.getSkinningBufferInfo(ri),  // SKINNING_BUFFER
+                    worldAABB.center,               // WORLD_AABB_CENTER
+                    0,                              // VISIBLE_MASK
+                    rcm.getMorphWeights(ri),        // MORPH_WEIGHTS
+                    rcm.getLayerMask(ri),           // LAYERS
+                    worldAABB.halfExtent,           // WORLD_AABB_EXTENT
+                    {},                             // PRIMITIVES
+                    0,                              // SUMMED_PRIMITIVE_COUNT
+                    scale                           // USER_DATA
             );
         }
 
@@ -179,7 +194,7 @@ void FScene::prepare(const mat4f& worldOriginTransform) {
     }
 }
 
-void FScene::updateUBOs(utils::Range<uint32_t> visibleRenderables, backend::Handle<backend::HwUniformBuffer> renderableUbh) noexcept {
+void FScene::updateUBOs(utils::Range<uint32_t> visibleRenderables, backend::Handle<backend::HwBufferObject> renderableUbh) noexcept {
     FEngine::DriverApi& driver = mEngine.getDriverApi();
     const size_t size = visibleRenderables.size() * sizeof(PerRenderableUib);
 
@@ -239,12 +254,16 @@ void FScene::updateUBOs(utils::Range<uint32_t> visibleRenderables, backend::Hand
         UniformBuffer::setUniform(buffer,
                 offset + offsetof(PerRenderableUib, morphWeights),
                 sceneData.elementAt<MORPH_WEIGHTS>(i));
+
+        // TODO: We need to find a better way to provide the scale information per object
+        UniformBuffer::setUniform(buffer,
+                offset + offsetof(PerRenderableUib, userData), sceneData.elementAt<USER_DATA>(i));
     }
 
     // TODO: handle static objects separately
     mHasContactShadows = hasContactShadows;
     mRenderableViewUbh = renderableUbh;
-    driver.loadUniformBuffer(renderableUbh, { buffer, size });
+    driver.updateBufferObject(renderableUbh, { buffer, size }, 0);
 
     if (mSkybox) {
         mSkybox->commit(driver);
@@ -257,42 +276,21 @@ void FScene::terminate(FEngine& engine) {
 }
 
 void FScene::prepareDynamicLights(const CameraInfo& camera, ArenaScope& rootArena,
-        backend::Handle<backend::HwUniformBuffer> lightUbh) noexcept {
+        backend::Handle<backend::HwBufferObject> lightUbh) noexcept {
     FEngine::DriverApi& driver = mEngine.getDriverApi();
     FLightManager& lcm = mEngine.getLightManager();
     FScene::LightSoa& lightData = getLightData();
 
     /*
-     * Here we copy our lights data into the GPU buffer, some lights might be left out if there
-     * are more than the GPU buffer allows (i.e. 256).
-     *
-     * We always sort lights by distance to the camera plane so that:
-     * - we can build light trees
-     * - lights farther from the camera are dropped when in excess
-     *   (note this doesn't work well, e.g. for search-lights)
+     * Here we copy our lights data into the GPU buffer.
      */
 
-    ArenaScope arena(rootArena.getAllocator());
     size_t const size = lightData.size();
     // number of point/spot lights
     size_t positionalLightCount = size - DIRECTIONAL_LIGHTS_COUNT;
     assert_invariant(positionalLightCount);
 
-    // always allocate at least 4 entries, because the vectorized loops below rely on that
-    float* const UTILS_RESTRICT distances = arena.allocate<float>((size + 3u) & 3u, CACHELINE_SIZE);
-
-    // pre-compute the lights' distance to the camera plane, for sorting below
-    // - we don't skip the directional light, because we don't care, it's ignored during sorting
     float4 const* const UTILS_RESTRICT spheres = lightData.data<FScene::POSITION_RADIUS>();
-    computeLightCameraPlaneDistances(distances, camera, spheres, size);
-
-    // skip directional light
-    Zip2Iterator<FScene::LightSoa::iterator, float*> b = { lightData.begin(), distances };
-    std::sort(b + DIRECTIONAL_LIGHTS_COUNT, b + size,
-            [](auto const& lhs, auto const& rhs) { return lhs.second < rhs.second; });
-
-    // drop excess lights
-    lightData.resize(std::min(size, CONFIG_MAX_LIGHT_COUNT + DIRECTIONAL_LIGHTS_COUNT));
 
     // compute the light ranges (needed when building light trees)
     float2* const zrange = lightData.data<FScene::SCREEN_SPACE_Z_RANGE>();
@@ -314,27 +312,7 @@ void FScene::prepareDynamicLights(const CameraInfo& camera, ArenaScope& rootAren
         lp[gpuIndex].type                 = lcm.isPointLight(li) ? 0u : 1u;
     }
 
-    driver.loadUniformBuffer(lightUbh, { lp, positionalLightCount * sizeof(LightsUib) });
-}
-
-// These methods need to exist so clang honors the __restrict__ keyword, which in turn
-// produces much better vectorization. The ALWAYS_INLINE keyword makes sure we actually don't
-// pay the price of the call!
-UTILS_ALWAYS_INLINE
-inline void FScene::computeLightCameraPlaneDistances(
-        float* UTILS_RESTRICT const distances,
-        CameraInfo const& UTILS_RESTRICT camera,
-        float4 const* UTILS_RESTRICT const spheres, size_t count) noexcept {
-
-    // without this, the vectorization is less efficient
-    // we're guaranteed to have a multiple of 4 lights (at least)
-    count = uint32_t(count + 3u) & ~3u;
-
-    for (size_t i = 0 ; i < count; i++) {
-        const float4 sphere = spheres[i];
-        const float4 center = camera.view * sphere.xyz; // camera points towards the -z axis
-        distances[i] = -center.z > 0.0f ? -center.z : 0.0f; // std::max() prevents vectorization (???)
-    }
+    driver.updateBufferObject(lightUbh, { lp, positionalLightCount * sizeof(LightsUib) }, 0);
 }
 
 // These methods need to exist so clang honors the __restrict__ keyword, which in turn

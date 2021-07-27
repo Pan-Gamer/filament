@@ -96,7 +96,7 @@ io::sstream& CodeGenerator::generateProlog(io::sstream& out, ShaderType type,
     out << '\n';
     if (mTargetApi == TargetApi::VULKAN ||
         mTargetApi == TargetApi::METAL ||
-        mTargetApi == TargetApi::OPENGL && mShaderModel == ShaderModel::GL_CORE_41) {
+        (mTargetApi == TargetApi::OPENGL && mShaderModel == ShaderModel::GL_CORE_41)) {
         out << "#define FILAMENT_HAS_FEATURE_TEXTURE_GATHER\n";
     }
 
@@ -253,11 +253,30 @@ utils::io::sstream& CodeGenerator::generateOutput(utils::io::sstream& out, Shade
     (void) qualifier;
     assert(qualifier == MaterialBuilder::VariableQualifier::OUT);
 
+    // The material output type is the type the shader writes to from the material.
+    const MaterialBuilder::OutputType materialOutputType = outputType;
+
+    const char* swizzleString = "";
+
+    // Metal doesn't support some 3-component texture formats, so the backend uses 4-component
+    // formats behind the scenes. It's an error to output fewer components than the attachment
+    // needs, so we always output a float4 instead of a float3. It's never an error to output extra
+    // components.
+    if (mTargetApi == TargetApi::METAL) {
+        if (outputType == MaterialBuilder::OutputType::FLOAT3) {
+            outputType = MaterialBuilder::OutputType::FLOAT4;
+            swizzleString = ".rgb";
+        }
+    }
+
+    const char* materialTypeString = getOutputTypeName(materialOutputType);
     const char* typeString = getOutputTypeName(outputType);
 
     out << "\n#define FRAG_OUTPUT" << index << " " << name.c_str() << "\n";
     out << "\n#define FRAG_OUTPUT_AT" << index << " output_" << name.c_str() << "\n";
+    out << "\n#define FRAG_OUTPUT_MATERIAL_TYPE" << index << " " << materialTypeString << "\n";
     out << "\n#define FRAG_OUTPUT_TYPE" << index << " " << typeString << "\n";
+    out << "\n#define FRAG_OUTPUT_SWIZZLE" << index << " " << swizzleString << "\n";
     out << "layout(location=" << index << ") out " << typeString <<
         " output_" << name.c_str() << ";\n";
 
@@ -561,7 +580,7 @@ io::sstream& CodeGenerator::generateParameters(io::sstream& out, ShaderType type
 }
 
 io::sstream& CodeGenerator::generateShaderLit(io::sstream& out, ShaderType type,
-        filament::Variant variant, filament::Shading shading) const {
+        filament::Variant variant, filament::Shading shading, bool customSurfaceShading) const {
     if (type == ShaderType::VERTEX) {
     } else if (type == ShaderType::FRAGMENT) {
         out << SHADERS_COMMON_LIGHTING_FS_DATA;
@@ -576,7 +595,11 @@ io::sstream& CodeGenerator::generateShaderLit(io::sstream& out, ShaderType type,
                 break;
             case Shading::SPECULAR_GLOSSINESS:
             case Shading::LIT:
-                out << SHADERS_SHADING_MODEL_STANDARD_FS_DATA;
+                if (customSurfaceShading) {
+                    out << SHADERS_SHADING_LIT_CUSTOM_FS_DATA;
+                } else {
+                    out << SHADERS_SHADING_MODEL_STANDARD_FS_DATA;
+                }
                 break;
             case Shading::SUBSURFACE:
                 out << SHADERS_SHADING_MODEL_SUBSURFACE_FS_DATA;
@@ -674,7 +697,6 @@ char const* CodeGenerator::getUniformTypeName(UniformInterfaceBlock::Type type) 
 }
 
 char const* CodeGenerator::getOutputTypeName(MaterialBuilder::OutputType type) noexcept {
-    using Type = UniformInterfaceBlock::Type;
     switch (type) {
         case MaterialBuilder::OutputType::FLOAT:  return "float";
         case MaterialBuilder::OutputType::FLOAT2: return "float2";

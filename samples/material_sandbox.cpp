@@ -716,7 +716,8 @@ static void gui(filament::Engine* engine, filament::View*) {
             ImGui::Indent();
             ImGui::Checkbox("Enabled##colorGrading", &params.colorGrading);
             ImGui::Combo("Tone-mapping", &colorGrading.toneMapping,
-                    "Linear\0ACES (legacy)\0ACES\0Filmic\0EVILS\0Reinhard\0Display Range\0\0");
+                    "Linear\0ACES (legacy)\0ACES\0Filmic\0Display Range\0\0");
+            ImGui::Checkbox("Luminance scaling", &colorGrading.luminanceScaling);
             if (ImGui::CollapsingHeader("While balance")) {
                 ImGui::SliderInt("Temperature", &colorGrading.temperature, -100, 100);
                 ImGui::SliderInt("Tint", &colorGrading.tint, -100, 100);
@@ -866,8 +867,6 @@ static void gui(filament::Engine* engine, filament::View*) {
                     debug.getPropertyAddress<bool>("d.shadowmap.far_uses_shadowcasters"));
             ImGui::Checkbox("Focus shadow casters",
                     debug.getPropertyAddress<bool>("d.shadowmap.focus_shadowcasters"));
-            ImGui::Checkbox("Show checker board",
-                    debug.getPropertyAddress<bool>("d.shadowmap.checkerboard"));
 
             ImGui::SliderFloat("Normal bias", &params.normalBias, 0.0f, 4.0f);
             ImGui::SliderFloat("Constant bias", &params.constantBias, 0.0f, 1.0f);
@@ -971,6 +970,9 @@ static void preRender(filament::Engine* engine, filament::View* view, filament::
     if (g_params.colorGrading) {
         if (g_params.colorGradingOptions != g_lastColorGradingOptions) {
             ColorGradingOptions &options = g_params.colorGradingOptions;
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
             ColorGrading *colorGrading = ColorGrading::Builder()
                     .whiteBalance(options.temperature / 100.0f, options.tint / 100.0f)
                     .channelMixer(options.outRed, options.outGreen, options.outBlue)
@@ -986,7 +988,9 @@ static void preRender(filament::Engine* engine, filament::View* view, filament::
                     .saturation(options.saturation)
                     .curves(options.gamma, options.midPoint, options.scale)
                     .toneMapping(static_cast<ColorGrading::ToneMapping>(options.toneMapping))
+                    .luminanceScaling(options.luminanceScaling)
                     .build(*engine);
+#pragma clang diagnostic pop
 
             if (g_colorGrading) {
                 engine->destroy(g_colorGrading);

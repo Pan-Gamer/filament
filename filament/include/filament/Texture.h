@@ -94,7 +94,7 @@ public:
      *
      * @see generatePrefilterMipmap()
      */
-    struct UTILS_PUBLIC PrefilterOptions {
+    struct PrefilterOptions {
         uint16_t sampleCount = 8;   //!< sample count used for filtering
         bool mirror = true;         //!< whether the environment must be mirrored
     private:
@@ -217,7 +217,7 @@ public:
          *
          * With Metal, the id<MTLTexture> object should be cast to an intptr_t using
          * CFBridgingRetain to transfer ownership to Filament. Filament will release ownership of
-         * the textue object when the Filament texture is destroyed.
+         * the texture object when the Filament texture is destroyed.
          *
          * ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~{.cpp}
          *  id <MTLTexture> metalTexture = ...
@@ -394,6 +394,7 @@ public:
      *   - only the level of detail (lod) 0 can be specified
      *   - only nearest or linear filtering is supported
      *   - the size and format of the texture is defined by the external image
+     *   - only the CLAMP_TO_EDGE wrap mode is supported
      *
      * @param engine        Engine this texture is associated to.
      * @param image         An opaque handle to a platform specific image. Supported types are
@@ -429,6 +430,7 @@ public:
      *   - only the level of detail (lod) 0 can be specified
      *   - only nearest or linear filtering is supported
      *   - the size and format of the texture is defined by the external image
+     *   - only the CLAMP_TO_EDGE wrap mode is supported
      *
      * @param engine        Engine this texture is associated to.
      * @param image         An opaque handle to a platform specific image. Supported types are

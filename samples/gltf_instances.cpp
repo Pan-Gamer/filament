@@ -51,6 +51,11 @@ using namespace filament::viewer;
 using namespace gltfio;
 using namespace utils;
 
+enum MaterialSource {
+    GENERATE_SHADERS,
+    LOAD_UBERSHADERS,
+};
+
 struct App {
     Engine* engine;
     SimpleViewer* viewer;
@@ -270,7 +275,8 @@ int main(int argc, char** argv) {
         if (app.instanceToAnimate > -1) {
             instance = app.instances[app.instanceToAnimate];
         }
-        app.viewer->populateScene(app.asset, true, instance);
+        app.viewer->updateRootTransform();
+        app.viewer->populateScene(app.asset, instance);
         app.viewer->applyAnimation(now);
 
         // Add a new instance every second until reaching 100 instances.

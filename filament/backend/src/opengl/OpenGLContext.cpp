@@ -102,11 +102,6 @@ OpenGLContext::OpenGLContext() noexcept {
     } else if (strstr(renderer, "Mozilla")) {
         bugs.disable_invalidate_framebuffer = true;
     }
-#if defined(__EMSCRIPTEN__)
-    // Chrome does not support feedback loops in WebGL 2.0. See also:
-    // https://bugs.chromium.org/p/chromium/issues/detail?id=1066201
-    bugs.disable_feedback_loops = true;
-#endif
 
     // now we can query getter and features
     glGetIntegerv(GL_MAX_RENDERBUFFER_SIZE, &gets.max_renderbuffer_size);
@@ -119,6 +114,8 @@ OpenGLContext::OpenGLContext() noexcept {
         glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &gets.max_anisotropy);
     }
 #endif
+
+    assert_invariant(gets.max_draw_buffers >= 4); // minspec
 
 #if 0
     // this is useful for development, but too verbose even for debug builds
@@ -183,7 +180,7 @@ OpenGLContext::OpenGLContext() noexcept {
     if (ext.KHR_debug) {
         auto cb = [](GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length,
                 const GLchar* message, const void *userParam) {
-            io::LogStream* stream = nullptr;
+            io::ostream* stream = nullptr;
             switch (severity) {
                 case GL_DEBUG_SEVERITY_HIGH:
                     stream = &slog.e;
@@ -199,7 +196,7 @@ OpenGLContext::OpenGLContext() noexcept {
                     stream = &slog.i;
                     break;
             }
-            io::LogStream& out = *stream;
+            io::ostream& out = *stream;
             out << "KHR_debug ";
             switch (type) {
                 case GL_DEBUG_TYPE_ERROR:
@@ -258,13 +255,16 @@ void OpenGLContext::initExtensionsGLES(GLint major, GLint minor, ExtentionSet co
     ext.EXT_multisampled_render_to_texture2 = hasExtension(exts, "GL_EXT_multisampled_render_to_texture2");
     ext.EXT_shader_framebuffer_fetch = hasExtension(exts, "GL_EXT_shader_framebuffer_fetch");
     ext.EXT_texture_compression_etc2 = true;
-    ext.EXT_texture_compression_s3tc_srgb = hasExtension(exts, "GL_EXT_texture_compression_s3tc_srgb");
     ext.EXT_texture_filter_anisotropic = hasExtension(exts, "GL_EXT_texture_filter_anisotropic");
     ext.GOOGLE_cpp_style_line_directive = hasExtension(exts, "GL_GOOGLE_cpp_style_line_directive");
     ext.KHR_debug = hasExtension(exts, "GL_KHR_debug");
     ext.OES_EGL_image_external_essl3 = hasExtension(exts, "GL_OES_EGL_image_external_essl3");
     ext.QCOM_tiled_rendering = hasExtension(exts, "GL_QCOM_tiled_rendering");
-    ext.WEBGL_texture_compression_s3tc = hasExtension(exts, "WEBGL_compressed_texture_s3tc");
+    ext.EXT_texture_compression_s3tc = hasExtension(exts, "GL_EXT_texture_compression_s3tc");
+    ext.EXT_texture_compression_s3tc_srgb = hasExtension(exts, "GL_EXT_texture_compression_s3tc_srgb");
+    ext.WEBGL_compressed_texture_s3tc = hasExtension(exts, "WEBGL_compressed_texture_s3tc");
+    ext.WEBGL_compressed_texture_s3tc_srgb = hasExtension(exts, "WEBGL_compressed_texture_s3tc_srgb");
+    ext.WEBGL_compressed_texture_etc = hasExtension(exts, "WEBGL_compressed_texture_etc");
     // ES 3.2 implies EXT_color_buffer_float
     if (major >= 3 && minor >= 2) {
         ext.EXT_color_buffer_float = true;
@@ -284,7 +284,8 @@ void OpenGLContext::initExtensionsGL(GLint major, GLint minor, ExtentionSet cons
     ext.GOOGLE_cpp_style_line_directive = hasExtension(exts, "GL_GOOGLE_cpp_style_line_directive");
     ext.KHR_debug = major >= 4 && minor >= 3;
     ext.OES_EGL_image_external_essl3 = hasExtension(exts, "GL_OES_EGL_image_external_essl3");
-    ext.WEBGL_texture_compression_s3tc = hasExtension(exts, "GL_EXT_texture_compression_s3tc");
+    ext.EXT_texture_compression_s3tc = hasExtension(exts, "GL_EXT_texture_compression_s3tc");
+    ext.EXT_texture_compression_s3tc_srgb = hasExtension(exts, "GL_EXT_texture_compression_s3tc_srgb");
 }
 
 void OpenGLContext::bindBuffer(GLenum target, GLuint buffer) noexcept {

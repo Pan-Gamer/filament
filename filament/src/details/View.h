@@ -23,7 +23,7 @@
 
 #include "FrameInfo.h"
 #include "FrameHistory.h"
-#include "UniformBuffer.h"
+#include "TypedUniformBuffer.h"
 
 #include "details/Allocators.h"
 #include "details/Camera.h"
@@ -52,7 +52,7 @@ namespace utils {
 class JobSystem;
 } // namespace utils;
 
-// Avoid warnings for using the ToneMapping API, which has been publicly deprecated.
+// Avoid warnings for using the deprecated APIs.
 #if defined(__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
@@ -163,10 +163,13 @@ public:
             FScene::RenderableSoa& renderableData, FScene::LightSoa& lightData) noexcept;
     void prepareLighting(FEngine& engine, FEngine::DriverApi& driver,
             ArenaScope& arena, Viewport const& viewport) noexcept;
+
     void prepareSSAO(backend::Handle<backend::HwTexture> ssao) const noexcept;
     void prepareSSR(backend::Handle<backend::HwTexture> ssr, float refractionLodOffset) const noexcept;
     void prepareStructure(backend::Handle<backend::HwTexture> structure) const noexcept;
     void prepareShadow(backend::Handle<backend::HwTexture> structure) const noexcept;
+    void prepareShadowMap() const noexcept;
+
     void cleanupRenderPasses() const noexcept;
     void froxelize(FEngine& engine) const noexcept;
     void commitUniforms(backend::DriverApi& driver) const noexcept;
@@ -180,7 +183,7 @@ public:
     bool hasVsm() const noexcept { return mShadowType == ShadowType::VSM; }
 
     void renderShadowMaps(FrameGraph& fg, FEngine& engine, FEngine::DriverApi& driver,
-            RenderPass& pass) noexcept;
+            RenderPass const& pass) noexcept;
 
     void updatePrimitivesLod(
             FEngine& engine, const CameraInfo& camera,
@@ -230,14 +233,6 @@ public:
 
     const TemporalAntiAliasingOptions& getTemporalAntiAliasingOptions() const noexcept {
         return mTemporalAntiAliasingOptions;
-    }
-
-    void setToneMapping(ToneMapping type) noexcept {
-        mToneMapping = type;
-    }
-
-    ToneMapping getToneMapping() const noexcept {
-        return mToneMapping;
     }
 
     void setColorGrading(FColorGrading* colorGrading) noexcept {
@@ -292,12 +287,13 @@ public:
 
     void setAmbientOcclusionOptions(AmbientOcclusionOptions options) noexcept {
         options.radius = math::max(0.0f, options.radius);
-        options.bias = math::clamp(options.bias, 0.0f, 0.1f);
         options.power = std::max(0.0f, options.power);
+        options.bias = math::clamp(options.bias, 0.0f, 0.1f);
         // snap to the closer of 0.5 or 1.0
         options.resolution = std::floor(
                 math::clamp(options.resolution * 2.0f, 1.0f, 2.0f) + 0.5f) * 0.5f;
         options.intensity = std::max(0.0f, options.intensity);
+        options.bilateralThreshold = std::max(0.0f, options.bilateralThreshold);
         options.minHorizonAngleRad = math::clamp(options.minHorizonAngleRad, 0.0f, math::f::PI_2);
         options.ssct.lightConeRad = math::clamp(options.ssct.lightConeRad, 0.0f, math::f::PI_2);
         options.ssct.shadowDistance = std::max(0.0f, options.ssct.shadowDistance);
@@ -333,7 +329,9 @@ public:
 
     void setBloomOptions(BloomOptions options) noexcept {
         options.dirtStrength = math::saturate(options.dirtStrength);
-        options.levels = math::clamp(options.levels, uint8_t(3), uint8_t(12));
+        options.levels = math::clamp(options.levels, uint8_t(3), uint8_t(11));
+        options.resolution = math::clamp(options.resolution, 1u << options.levels, 2048u);
+        options.anamorphism = math::clamp(options.anamorphism, 1.0f/32.0f, 32.0f);
         options.highlight = std::max(10.0f, options.highlight);
         mBloomOptions = options;
     }
@@ -357,7 +355,6 @@ public:
     }
 
     void setDepthOfFieldOptions(DepthOfFieldOptions options) noexcept {
-        options.focusDistance = std::max(0.0f, options.focusDistance);
         options.cocScale = std::max(0.0f, options.cocScale);
         options.maxApertureDiameter = std::max(0.0f, options.maxApertureDiameter);
         mDepthOfFieldOptions = options;
@@ -418,9 +415,9 @@ public:
     static void cullRenderables(utils::JobSystem& js, FScene::RenderableSoa& renderableData,
             Frustum const& frustum, size_t bit) noexcept;
 
-    UniformBuffer& getViewUniforms() const { return mPerViewUb; }
+    auto& getViewUniforms() const { return mPerViewUb; }
+    auto& getShadowUniforms() const { return mShadowUb; }
     backend::SamplerGroup& getViewSamplers() const { return mPerViewSb; }
-    UniformBuffer& getShadowUniforms() const { return mShadowUb; }
 
     // Returns the frame history FIFO. This is typically used by the FrameGraph to access
     // previous frame data.
@@ -436,9 +433,12 @@ private:
     void prepareVisibleRenderables(utils::JobSystem& js,
             Frustum const& frustum, FScene::RenderableSoa& renderableData) const noexcept;
 
-    static void prepareVisibleLights(
-            FLightManager const& lcm, utils::JobSystem& js, Frustum const& frustum,
+    static void prepareVisibleLights(FLightManager const& lcm, ArenaScope& rootArena,
+            const CameraInfo& camera, Frustum const& frustum,
             FScene::LightSoa& lightData) noexcept;
+
+    static inline void computeLightCameraDistances(float* distances,
+            const CameraInfo& camera, const math::float4* spheres, size_t count) noexcept;
 
     static void computeVisibilityMasks(
             uint8_t visibleLayers, uint8_t const* layers,
@@ -449,6 +449,7 @@ private:
         driver.bindUniformBuffer(BindingPoints::PER_VIEW, mPerViewUbh);
         driver.bindUniformBuffer(BindingPoints::LIGHTS, mLightUbh);
         driver.bindUniformBuffer(BindingPoints::SHADOW, mShadowUbh);
+        driver.bindUniformBuffer(BindingPoints::FROXEL_RECORDS, mFroxelizer.getRecordBuffer());
         driver.bindSamplers(BindingPoints::PER_VIEW, mPerViewSbh);
     }
 
@@ -465,10 +466,10 @@ private:
 
     // these are accessed in the render loop, keep together
     backend::Handle<backend::HwSamplerGroup> mPerViewSbh;
-    backend::Handle<backend::HwUniformBuffer> mPerViewUbh;
-    backend::Handle<backend::HwUniformBuffer> mLightUbh;
-    backend::Handle<backend::HwUniformBuffer> mShadowUbh;
-    backend::Handle<backend::HwUniformBuffer> mRenderableUbh;
+    backend::Handle<backend::HwBufferObject> mPerViewUbh;
+    backend::Handle<backend::HwBufferObject> mLightUbh;
+    backend::Handle<backend::HwBufferObject> mShadowUbh;
+    backend::Handle<backend::HwBufferObject> mRenderableUbh;
 
     FScene* mScene = nullptr;
     FCamera* mCullingCamera = nullptr;
@@ -488,14 +489,13 @@ private:
     uint8_t mVisibleLayers = 0x1;
     uint8_t mSampleCount = 1;
     AntiAliasing mAntiAliasing = AntiAliasing::FXAA;
-    ToneMapping mToneMapping = ToneMapping::ACES;
     Dithering mDithering = Dithering::TEMPORAL;
     bool mShadowingEnabled = true;
     bool mScreenSpaceRefractionEnabled = true;
     bool mHasPostProcessPass = true;
     AmbientOcclusionOptions mAmbientOcclusionOptions{};
     ShadowType mShadowType = ShadowType::PCF;
-    VsmShadowOptions mVsmShadowOptions = {};
+    VsmShadowOptions mVsmShadowOptions = {}; // FIXME: this should probably be per-light
     BloomOptions mBloomOptions;
     FogOptions mFogOptions;
     DepthOfFieldOptions mDepthOfFieldOptions;
@@ -512,8 +512,8 @@ private:
 
     RenderQuality mRenderQuality;
 
-    mutable UniformBuffer mPerViewUb;
-    mutable UniformBuffer mShadowUb;
+    mutable TypedUniformBuffer<PerViewUib> mPerViewUb;
+    mutable TypedUniformBuffer<ShadowUib> mShadowUb;
     mutable backend::SamplerGroup mPerViewSb;
 
     mutable FrameHistory mFrameHistory{};

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.19)
 project(filament C ASM)
 
 set(TARGET filament)
@@ -32,11 +32,13 @@ set(PUBLIC_HDRS
         include/filament/RenderableManager.h
         include/filament/Renderer.h
         include/filament/Scene.h
+        include/filament/SkinningBuffer.h
         include/filament/Skybox.h
         include/filament/Stream.h
         include/filament/SwapChain.h
         include/filament/Texture.h
         include/filament/TextureSampler.h
+        include/filament/ToneMapper.h
         include/filament/TransformManager.h
         include/filament/VertexBuffer.h
         include/filament/View.h
@@ -59,14 +61,13 @@ set(SRCS
         src/FrameSkipper.cpp
         src/Froxelizer.cpp
         src/Frustum.cpp
-        src/GPUBuffer.cpp
         src/IndexBuffer.cpp
         src/IndirectLight.cpp
         src/Material.cpp
         src/MaterialInstance.cpp
         src/MaterialParser.cpp
         src/PostProcessManager.cpp
-        src/FrameGraphRenderPass.cpp
+        src/RenderPass.cpp
         src/RenderPrimitive.cpp
         src/RenderTarget.cpp
         src/Renderer.cpp
@@ -74,11 +75,12 @@ set(SRCS
         src/Scene.cpp
         src/ShadowMap.cpp
         src/ShadowMapManager.cpp
+        src/SkinningBuffer.cpp
         src/Skybox.cpp
         src/Stream.cpp
         src/SwapChain.cpp
         src/Texture.cpp
-        src/ToneMapping.cpp
+        src/ToneMapper.cpp
         src/UniformBuffer.cpp
         src/VertexBuffer.cpp
         src/View.cpp
@@ -101,13 +103,12 @@ set(PRIVATE_HDRS
         src/FilamentAPI-impl.h
         src/FrameHistory.h
         src/FrameInfo.h
-        src/GPUBuffer.h
         src/Intersections.h
         src/MaterialParser.h
         src/PostProcessManager.h
         src/RenderPass.h
         src/ResourceAllocator.h
-        src/ToneMapping.h
+        src/TypedUniformBuffer.h
         src/UniformBuffer.h
         src/components/CameraManager.h
         src/components/LightManager.h
@@ -136,6 +137,7 @@ set(PRIVATE_HDRS
         src/details/ShadowMap.h
         src/details/ShadowMapManager.h
         src/details/Skybox.h
+        src/details/SkinningBuffer.h
         src/details/Stream.h
         src/details/SwapChain.h
         src/details/Texture.h
@@ -170,6 +172,7 @@ set(MATERIAL_SRCS
         src/materials/dof/dofDilate.mat
         src/materials/dof/dofMipmap.mat
         src/materials/dof/dofMedian.mat
+        src/materials/flare/flare.mat
         src/materials/blitLow.mat
         src/materials/blitMedium.mat
         src/materials/blitHigh.mat
@@ -221,6 +224,7 @@ add_definitions(
     -DFILAMENT_PER_FRAME_COMMANDS_SIZE_IN_MB=${FILAMENT_PER_FRAME_COMMANDS_SIZE_IN_MB}
     -DFILAMENT_MIN_COMMAND_BUFFERS_SIZE_IN_MB=${FILAMENT_MIN_COMMAND_BUFFERS_SIZE_IN_MB}
     -DFILAMENT_OPENGL_HANDLE_ARENA_SIZE_IN_MB=${FILAMENT_OPENGL_HANDLE_ARENA_SIZE_IN_MB}
+    -DFILAMENT_METAL_HANDLE_ARENA_SIZE_IN_MB=${FILAMENT_METAL_HANDLE_ARENA_SIZE_IN_MB}
 )
 
 # ==================================================================================================
@@ -255,7 +259,6 @@ add_custom_command(
         OUTPUT "${MATERIAL_DIR}/colorGrading.filamat"
         DEPENDS ../shaders/src/dithering.fs
         DEPENDS ../shaders/src/vignette.fs
-        DEPENDS ../shaders/src/bloom.fs
         APPEND
 )
 
@@ -363,7 +366,6 @@ target_include_directories(${TARGET} PUBLIC ${PUBLIC_HDR_DIR})
 target_link_libraries(${TARGET} PUBLIC backend)
 target_link_libraries(${TARGET} PUBLIC math)
 target_link_libraries(${TARGET} PUBLIC utils)
-target_link_libraries(${TARGET} PUBLIC geometry) # TODO: remove this dependency after deprecating VertexBuffer::populateTangentQuaternions
 target_link_libraries(${TARGET} PUBLIC filaflat)
 target_link_libraries(${TARGET} PUBLIC filabridge)
 target_link_libraries(${TARGET} PUBLIC ibl-lite)
@@ -388,14 +390,13 @@ if (MSVC)
     )
 elseif(WEBGL)
     # Avoid strict-vtable-pointers here, it is broken in WebAssembly.
-    set(OPTIMIZATION_FLAGS -fvisibility=hidden -fvisibility-inlines-hidden)
+    set(OPTIMIZATION_FLAGS -fvisibility-inlines-hidden)
 else()
     set(OPTIMIZATION_FLAGS
         -ffast-math
         -ffp-contract=fast
         # TODO: aggressive vectorization is currently broken on Android
         #        -fslp-vectorize-aggressive
-        -fvisibility=hidden
         -fvisibility-inlines-hidden
         -fstrict-vtable-pointers
     )

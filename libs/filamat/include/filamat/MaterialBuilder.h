@@ -203,7 +203,7 @@ public:
     using SamplerType = filament::backend::SamplerType;
     using SubpassType = filament::backend::SubpassType;
     using SamplerFormat = filament::backend::SamplerFormat;
-    using SamplerPrecision = filament::backend::Precision;
+    using ParameterPrecision = filament::backend::Precision;
     using CullingMode = filament::backend::CullingMode;
 
     enum class VariableQualifier : uint8_t {
@@ -244,10 +244,22 @@ public:
     MaterialBuilder& interpolation(Interpolation interpolation) noexcept;
 
     //! Add a parameter (i.e., a uniform) to this material.
-    MaterialBuilder& parameter(UniformType type, const char* name) noexcept;
+    MaterialBuilder& parameter(UniformType type, ParameterPrecision precision,
+            const char* name) noexcept;
+
+    //! Add a parameter (i.e., a uniform) to this material.
+    MaterialBuilder& parameter(UniformType type, const char* name) noexcept {
+        return parameter(type, ParameterPrecision::DEFAULT, name);
+    }
 
     //! Add a parameter array to this material.
-    MaterialBuilder& parameter(UniformType type, size_t size, const char* name) noexcept;
+    MaterialBuilder& parameter(UniformType type, size_t size,
+            ParameterPrecision precision, const char* name) noexcept;
+
+    //! Add a parameter array to this material.
+    MaterialBuilder& parameter(UniformType type, size_t size, const char* name) noexcept {
+        return parameter(type, size, ParameterPrecision::DEFAULT, name);
+    }
 
     /**
      * Add a sampler parameter to this material.
@@ -255,14 +267,14 @@ public:
      * When SamplerType::SAMPLER_EXTERNAL is specifed, format and precision are ignored.
      */
     MaterialBuilder& parameter(SamplerType samplerType, SamplerFormat format,
-            SamplerPrecision precision, const char* name) noexcept;
-    /// @copydoc parameter(SamplerType, SamplerFormat, SamplerPrecision, const char*)
+            ParameterPrecision precision, const char* name) noexcept;
+    /// @copydoc parameter(SamplerType, SamplerFormat, ParameterPrecision, const char*)
     MaterialBuilder& parameter(SamplerType samplerType, SamplerFormat format,
             const char* name) noexcept;
-    /// @copydoc parameter(SamplerType, SamplerFormat, SamplerPrecision, const char*)
-    MaterialBuilder& parameter(SamplerType samplerType, SamplerPrecision precision,
+    /// @copydoc parameter(SamplerType, SamplerFormat, ParameterPrecision, const char*)
+    MaterialBuilder& parameter(SamplerType samplerType, ParameterPrecision precision,
             const char* name) noexcept;
-    /// @copydoc parameter(SamplerType, SamplerFormat, SamplerPrecision, const char*)
+    /// @copydoc parameter(SamplerType, SamplerFormat, ParameterPrecision, const char*)
     MaterialBuilder& parameter(SamplerType samplerType, const char* name) noexcept;
 
     //! Custom variables (all float4).
@@ -393,6 +405,9 @@ public:
     //! The material output is multiplied by the shadowing factor (UNLIT model only).
     MaterialBuilder& shadowMultiplier(bool shadowMultiplier) noexcept;
 
+    //! This material casts transparent shadows. The blending mode must be TRANSPARENT or FADE.
+    MaterialBuilder& transparentShadow(bool transparentShadow) noexcept;
+
     /**
      * Reduces specular aliasing for materials that have low roughness. Turning this feature on also
      * helps preserve the shapes of specular highlights as an object moves away from the camera.
@@ -449,6 +464,26 @@ public:
     MaterialBuilder& transparencyMode(TransparencyMode mode) noexcept;
 
     /**
+     * Enable / disable custom surface shading. Custom surface shading requires the LIT
+     * shading model. In addition, the following function must be defined in the fragment
+     * block:
+     *
+     * ~~~~~
+     * vec3 surfaceShading(const MaterialInputs materialInputs,
+     *         const ShadingData shadingData, const LightData lightData) {
+     *
+     *     return vec3(1.0); // Compute surface shading with custom BRDF, etc.
+     * }
+     * ~~~~~
+     *
+     * This function is invoked once per light. Please refer to the materials documentation
+     * for more information about the different parameters.
+     *
+     * @param customSurfaceShading Enables or disables custom surface shading
+     */
+    MaterialBuilder& customSurfaceShading(bool customSurfaceShading) noexcept;
+
+    /**
      * Specifies desktop vs mobile; works in concert with TargetApi to determine the shader models
      * (used to generate code) and final output representations (spirv and/or text).
      */
@@ -502,37 +537,36 @@ public:
     /**
      * Add a subpass parameter to this material.
      */
-    MaterialBuilder& parameter(SubpassType subpassType, SamplerFormat format, SamplerPrecision
+    MaterialBuilder& parameter(SubpassType subpassType, SamplerFormat format, ParameterPrecision
             precision, const char* name) noexcept;
     MaterialBuilder& parameter(SubpassType subpassType, SamplerFormat format, const char* name)
         noexcept;
-    MaterialBuilder& parameter(SubpassType subpassType, SamplerPrecision precision,
+    MaterialBuilder& parameter(SubpassType subpassType, ParameterPrecision precision,
             const char* name) noexcept;
     MaterialBuilder& parameter(SubpassType subpassType, const char* name) noexcept;
 
     struct Parameter {
         Parameter() noexcept : parameterType(INVALID) {}
-        Parameter(const char* paramName, SamplerType t, SamplerFormat f, SamplerPrecision p)
-                : name(paramName), size(1), samplerType(t), format(f), precision(p),
-                parameterType(SAMPLER) { }
-        Parameter(const char* paramName, UniformType t, size_t typeSize)
-                : name(paramName), size(typeSize), uniformType(t), parameterType(UNIFORM) { }
-        Parameter(const char* paramName, SubpassType t, SamplerFormat f, SamplerPrecision p)
-                : name(paramName), size(1), subpassType(t), format(f), precision(p),
-                parameterType(SUBPASS) { }
+
+        // Sampler
+        Parameter(const char* paramName, SamplerType t, SamplerFormat f, ParameterPrecision p)
+                : name(paramName), size(1), precision(p), samplerType(t), format(f), parameterType(SAMPLER) { }
+
+        // Uniform
+        Parameter(const char* paramName, UniformType t, size_t typeSize, ParameterPrecision p)
+                : name(paramName), size(typeSize), uniformType(t), precision(p), parameterType(UNIFORM) { }
+
+        // Subpass
+        Parameter(const char* paramName, SubpassType t, SamplerFormat f, ParameterPrecision p)
+                : name(paramName), size(1), precision(p), subpassType(t), format(f), parameterType(SUBPASS) { }
+
         utils::CString name;
         size_t size;
-        union {
-            UniformType uniformType;
-            struct {
-                union {
-                    SamplerType samplerType;
-                    SubpassType subpassType;
-                };
-                SamplerFormat format;
-                SamplerPrecision precision;
-            };
-        };
+        UniformType uniformType;
+        ParameterPrecision precision;
+        SamplerType samplerType;
+        SubpassType subpassType;
+        SamplerFormat format;
         enum {
             INVALID,
             UNIFORM,
@@ -568,7 +602,7 @@ public:
 
     static constexpr size_t MAX_COLOR_OUTPUT = filament::backend::MRT::MAX_SUPPORTED_RENDER_TARGET_COUNT;
     static constexpr size_t MAX_DEPTH_OUTPUT = 1;
-    static_assert(MAX_COLOR_OUTPUT == 4,
+    static_assert(MAX_COLOR_OUTPUT == 8,
             "When updating MRT::TARGET_COUNT, manually update post_process_inputs.fs"
             " and post_process.fs");
 
@@ -675,6 +709,7 @@ private:
     float mSpecularAntiAliasingThreshold = 0.2f;
 
     bool mShadowMultiplier = false;
+    bool mTransparentShadow = false;
 
     uint8_t mParameterCount = 0;
 
@@ -695,6 +730,8 @@ private:
 
     SpecularAmbientOcclusion mSpecularAO = SpecularAmbientOcclusion::NONE;
     bool mSpecularAOSet = false;
+
+    bool mCustomSurfaceShading = false;
 
     bool mEnableFramebufferFetch = false;
 

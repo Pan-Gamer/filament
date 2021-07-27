@@ -35,6 +35,7 @@
 #include "details/ResourceList.h"
 #include "details/ColorGrading.h"
 #include "details/Skybox.h"
+#include "details/SkinningBuffer.h"
 
 #include "private/backend/CommandStream.h"
 #include "private/backend/CommandBufferQueue.h"
@@ -210,6 +211,10 @@ public:
         return mBackend;
     }
 
+    Platform* getPlatform() const noexcept {
+        return mPlatform;
+    }
+
     ResourceAllocator& getResourceAllocator() noexcept {
         assert_invariant(mResourceAllocator);
         return *mResourceAllocator;
@@ -228,6 +233,7 @@ public:
     FBufferObject* createBufferObject(const BufferObject::Builder& builder) noexcept;
     FVertexBuffer* createVertexBuffer(const VertexBuffer::Builder& builder) noexcept;
     FIndexBuffer* createIndexBuffer(const IndexBuffer::Builder& builder) noexcept;
+    FSkinningBuffer* createSkinningBuffer(const SkinningBuffer::Builder& builder) noexcept;
     FIndirectLight* createIndirectLight(const IndirectLight::Builder& builder) noexcept;
     FMaterial* createMaterial(const Material::Builder& builder) noexcept;
     FTexture* createTexture(const Texture::Builder& builder) noexcept;
@@ -240,7 +246,8 @@ public:
     void createLight(const LightManager::Builder& builder, utils::Entity entity);
 
     FRenderer* createRenderer() noexcept;
-    FMaterialInstance* createMaterialInstance(const FMaterial* material, const char* name) noexcept;
+    FMaterialInstance* createMaterialInstance(const FMaterial* material,
+            const FMaterialInstance* other, const char* name) noexcept;
 
     FScene* createScene() noexcept;
     FView* createView() noexcept;
@@ -257,6 +264,7 @@ public:
     bool destroy(const FVertexBuffer* p);
     bool destroy(const FFence* p);
     bool destroy(const FIndexBuffer* p);
+    bool destroy(const FSkinningBuffer* p);
     bool destroy(const FIndirectLight* p);
     bool destroy(const FMaterial* p);
     bool destroy(const FMaterialInstance* p);
@@ -276,6 +284,17 @@ public:
 
     // flush the current buffer
     void flush();
+
+    // flush the current buffer based on some heuristics
+    void flushIfNeeded() {
+        auto counter = mFlushCounter + 1;
+        if (UTILS_LIKELY(counter < 128)) {
+            mFlushCounter = counter;
+        } else {
+            mFlushCounter = 0;
+            flush();
+        }
+    }
 
     /**
      * Processes the platform's event queue when called from the platform's event-handling thread.
@@ -352,6 +371,7 @@ private:
     ResourceList<FSwapChain> mSwapChains{ "SwapChain" };
     ResourceList<FStream> mStreams{ "Stream" };
     ResourceList<FIndexBuffer> mIndexBuffers{ "IndexBuffer" };
+    ResourceList<FSkinningBuffer> mSkinningBuffers{ "SkinningBuffer" };
     ResourceList<FVertexBuffer> mVertexBuffers{ "VertexBuffer" };
     ResourceList<FIndirectLight> mIndirectLights{ "IndirectLight" };
     ResourceList<FMaterial> mMaterials{ "Material" };
@@ -370,11 +390,13 @@ private:
     std::thread mDriverThread;
     backend::CommandBufferQueue mCommandBufferQueue;
     DriverApi mCommandStream;
+    uint32_t mFlushCounter = 0;
 
     LinearAllocatorArena mPerRenderPassAllocator;
     HeapAllocatorArena mHeapAllocator;
 
     utils::JobSystem mJobSystem;
+    static uint32_t getJobSystemThreadPoolSize() noexcept;
 
     std::default_random_engine mRandomEngine;
 
@@ -402,7 +424,6 @@ public:
         struct {
             bool far_uses_shadowcasters = true;
             bool focus_shadowcasters = true;
-            bool checkerboard = false;
             bool lispsm = true;
             bool visualize_cascades = false;
             bool tightly_bound_scene = true;

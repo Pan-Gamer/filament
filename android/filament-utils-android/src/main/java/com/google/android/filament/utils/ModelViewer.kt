@@ -105,12 +105,12 @@ class ModelViewer(val engine: Engine) : android.view.View.OnTouchListener {
     init {
         renderer = engine.createRenderer()
         scene = engine.createScene()
-        camera = engine.createCamera().apply { setExposure(kAperture, kShutterSpeed, kSensitivity) }
+        camera = engine.createCamera(engine.entityManager.create()).apply { setExposure(kAperture, kShutterSpeed, kSensitivity) }
         view = engine.createView()
         view.scene = scene
         view.camera = camera
 
-        assetLoader = AssetLoader(engine, MaterialProvider(engine), EntityManager.get())
+        assetLoader = AssetLoader(engine, UbershaderLoader(engine), EntityManager.get())
         resourceLoader = ResourceLoader(engine, normalizeSkinningWeights, recomputeBoundingBoxes)
 
         // Always add a direct light source since it is required for shadowing.
@@ -226,6 +226,16 @@ class ModelViewer(val engine: Engine) : android.view.View.OnTouchListener {
     }
 
     /**
+     * Removes the transformation that was set up via transformToUnitCube.
+     */
+    fun clearRootTransform() {
+        asset?.let {
+            val tm = engine.transformManager
+            tm.setTransform(tm.getInstance(it.root), Mat4().toFloatArray())
+        }
+    }
+
+    /**
      * Frees all entities associated with the most recently-loaded model.
      */
     fun destroyModel() {
@@ -299,7 +309,8 @@ class ModelViewer(val engine: Engine) : android.view.View.OnTouchListener {
                 engine.destroyRenderer(renderer)
                 engine.destroyView(this@ModelViewer.view)
                 engine.destroyScene(scene)
-                engine.destroyCamera(camera)
+                engine.destroyCameraComponent(camera.entity)
+                EntityManager.get().destroy(camera.entity)
 
                 EntityManager.get().destroy(light)
 

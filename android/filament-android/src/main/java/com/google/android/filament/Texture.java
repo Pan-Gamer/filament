@@ -73,11 +73,7 @@ import static com.google.android.filament.Texture.Type.COMPRESSED;
 public class Texture {
     private long mNativeObject;
 
-    Texture(long nativeTexture) {
-        mNativeObject = nativeTexture;
-    }
-
-    public Texture(Engine engine, long nativeTexture) {
+    public Texture(long nativeTexture) {
         mNativeObject = nativeTexture;
     }
 
@@ -696,6 +692,26 @@ public class Texture {
         }
 
         /**
+         * Specify a native texture to import as a Filament texture.
+         * <p>
+         * The texture id is backend-specific:
+         * <ul>
+         *   <li> OpenGL: GLuint texture ID </li>
+         * </ul>
+         * </p>
+         *
+         *
+         * @param id a backend specific texture identifier
+         *
+         * @return This Builder, for chaining calls.
+         */
+        @NonNull
+        public Builder importTexture(long id) {
+            nBuilderImportTexture(mNativeBuilder, id);
+            return this;
+        }
+
+        /**
          * Creates a new <code>Texture</code> instance.
          * @param engine The {@link Engine} to associate this <code>Texture</code> with.
          * @return A newly created <code>Texture</code>
@@ -1167,6 +1183,7 @@ public class Texture {
     private static native void nBuilderFormat(long nativeBuilder, int format);
     private static native void nBuilderUsage(long nativeBuilder, int flags);
     private static native void nBuilderSwizzle(long nativeBuilder, int r, int g, int b, int a);
+    private static native void nBuilderImportTexture(long nativeBuilder, long id);
     private static native long nBuilderBuild(long nativeBuilder, long nativeEngine);
 
     private static native int nGetWidth(long nativeTexture, int level);

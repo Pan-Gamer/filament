@@ -244,15 +244,6 @@ public:
             uint64_t vsyncSteadyClockTimeNano = 0u);
 
     /**
-     * @deprecated, use SwapChain::setFrameScheduledCallback to set the callback instead.
-     * @see beginFrame(SwapChain*, uint64_t)
-     */
-    UTILS_DEPRECATED
-    bool beginFrame(SwapChain* swapChain,
-            uint64_t vsyncSteadyClockTimeNano,
-            backend::FrameScheduledCallback callback, void* user = nullptr);
-
-    /**
      * Render a View into this renderer's window.
      *
      * This is filament main rendering method, most of the CPU-side heavy lifting is performed
@@ -333,38 +324,39 @@ public:
      * @param height    Height of the sub-region to read back.
      * @param buffer    Client-side buffer where the read-back will be written.
      *
-     *                  The following format are always supported:
+     * The following formats are always supported:
      *                      - PixelBufferDescriptor::PixelDataFormat::RGBA
      *                      - PixelBufferDescriptor::PixelDataFormat::RGBA_INTEGER
      *
-     *                  The following types are always supported:
+     * The following types are always supported:
      *                      - PixelBufferDescriptor::PixelDataType::UBYTE
      *                      - PixelBufferDescriptor::PixelDataType::UINT
      *                      - PixelBufferDescriptor::PixelDataType::INT
      *                      - PixelBufferDescriptor::PixelDataType::FLOAT
      *
-     *                  Other combination of format/type may be supported. If a combination is
-     *                  not supported, this operation may fail silently. Use a DEBUG build
-     *                  to get some logs about the failure.
+     * Other combinations of format/type may be supported. If a combination is
+     * not supported, this operation may fail silently. Use a DEBUG build
+     * to get some logs about the failure.
      *
      *
-     *  Framebuffer as seen on         User buffer (PixelBufferDescriptor&)
+     *  Framebuffer as seen on User buffer (PixelBufferDescriptor&)
      *  screen
-     *  +--------------------+
-     *  |                    |                .stride         .alignment
-     *  |                    |         ----------------------->-->
-     *  |                    |         O----------------------+--+   low addresses
-     *  |                    |         |          |           |  |
-     *  |             w      |         |          | .top      |  |
-     *  |       <--------->  |         |          V           |  |
-     *  |       +---------+  |         |     +---------+      |  |
-     *  |       |     ^   |  | ======> |     |         |      |  |
-     *  |   x   |    h|   |  |         |.left|         |      |  |
-     *  +------>|     v   |  |         +---->|         |      |  |
-     *  |       +.........+  |         |     +.........+      |  |
-     *  |            ^       |         |                      |  |
-     *  |          y |       |         +----------------------+--+  high addresses
-     *  O------------+-------+
+     *  
+     *      +--------------------+
+     *      |                    |                .stride         .alignment
+     *      |                    |         ----------------------->-->
+     *      |                    |         O----------------------+--+   low addresses
+     *      |                    |         |          |           |  |
+     *      |             w      |         |          | .top      |  |
+     *      |       <--------->  |         |          V           |  |
+     *      |       +---------+  |         |     +---------+      |  |
+     *      |       |     ^   |  | ======> |     |         |      |  |
+     *      |   x   |    h|   |  |         |.left|         |      |  |
+     *      +------>|     v   |  |         +---->|         |      |  |
+     *      |       +.........+  |         |     +.........+      |  |
+     *      |            ^       |         |                      |  |
+     *      |          y |       |         +----------------------+--+  high addresses
+     *      O------------+-------+
      *
      *
      * Typically readPixels() will be called after render() and before endFrame().
@@ -408,38 +400,39 @@ public:
      * @param height        Height of the sub-region to read back.
      * @param buffer        Client-side buffer where the read-back will be written.
      *
-     *                  The following format are always supported:
+     * The following formats are always supported:
      *                      - PixelBufferDescriptor::PixelDataFormat::RGBA
      *                      - PixelBufferDescriptor::PixelDataFormat::RGBA_INTEGER
      *
-     *                  The following types are always supported:
+     * The following types are always supported:
      *                      - PixelBufferDescriptor::PixelDataType::UBYTE
      *                      - PixelBufferDescriptor::PixelDataType::UINT
      *                      - PixelBufferDescriptor::PixelDataType::INT
      *                      - PixelBufferDescriptor::PixelDataType::FLOAT
      *
-     *                  Other combination of format/type may be supported. If a combination is
-     *                  not supported, this operation may fail silently. Use a DEBUG build
-     *                  to get some logs about the failure.
+     * Other combinations of format/type may be supported. If a combination is
+     * not supported, this operation may fail silently. Use a DEBUG build
+     * to get some logs about the failure.
      *
      *
-     *  Framebuffer as seen on         User buffer (PixelBufferDescriptor&)
+     *  Framebuffer as seen on User buffer (PixelBufferDescriptor&)
      *  screen
-     *  +--------------------+
-     *  |                    |                .stride         .alignment
-     *  |                    |         ----------------------->-->
-     *  |                    |         O----------------------+--+   low addresses
-     *  |                    |         |          |           |  |
-     *  |             w      |         |          | .top      |  |
-     *  |       <--------->  |         |          V           |  |
-     *  |       +---------+  |         |     +---------+      |  |
-     *  |       |     ^   |  | ======> |     |         |      |  |
-     *  |   x   |    h|   |  |         |.left|         |      |  |
-     *  +------>|     v   |  |         +---->|         |      |  |
-     *  |       +.........+  |         |     +.........+      |  |
-     *  |            ^       |         |                      |  |
-     *  |          y |       |         +----------------------+--+  high addresses
-     *  O------------+-------+
+     *  
+     *      +--------------------+
+     *      |                    |                .stride         .alignment
+     *      |                    |         ----------------------->-->
+     *      |                    |         O----------------------+--+   low addresses
+     *      |                    |         |          |           |  |
+     *      |             w      |         |          | .top      |  |
+     *      |       <--------->  |         |          V           |  |
+     *      |       +---------+  |         |     +---------+      |  |
+     *      |       |     ^   |  | ======> |     |         |      |  |
+     *      |   x   |    h|   |  |         |.left|         |      |  |
+     *      +------>|     v   |  |         +---->|         |      |  |
+     *      |       +.........+  |         |     +.........+      |  |
+     *      |            ^       |         |                      |  |
+     *      |          y |       |         +----------------------+--+  high addresses
+     *      O------------+-------+
      *
      *
      * Typically readPixels() will be called after render() and before endFrame().

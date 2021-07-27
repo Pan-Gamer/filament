@@ -18,7 +18,11 @@
 
 #include <utils/Panic.h>
 
-#define FILAMENT_VULKAN_VERBOSE 0
+#include "VulkanConstants.h"
+
+// If any VkRenderPass or VkFramebuffer is unused for more than TIME_BEFORE_EVICTION frames, it
+// is evicted from the cache.
+static constexpr uint32_t TIME_BEFORE_EVICTION = VK_MAX_COMMAND_BUFFERS;
 
 using namespace bluevk;
 
@@ -300,15 +304,16 @@ VkRenderPass VulkanFboCache::getRenderPass(RenderPassKey config) noexcept {
 
     // Populate the Depth Attachment.
     if (hasDepth) {
-        bool clear = any(config.clear & TargetBufferFlags::DEPTH);
-        bool discard = any(config.discardStart & TargetBufferFlags::DEPTH);
+        const bool clear = any(config.clear & TargetBufferFlags::DEPTH);
+        const bool discardStart = any(config.discardStart & TargetBufferFlags::DEPTH);
+        const bool discardEnd = any(config.discardEnd & TargetBufferFlags::DEPTH);
         depthAttachmentRef.layout = config.depthLayout;
         depthAttachmentRef.attachment = attachmentIndex;
         attachments[attachmentIndex++] = {
             .format = config.depthFormat,
             .samples = (VkSampleCountFlagBits) config.samples,
-            .loadOp = clear ? kClear : (discard ? kDontCare : kKeep),
-            .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+            .loadOp = clear ? kClear : (discardStart ? kDontCare : kKeep),
+            .storeOp = discardEnd ? kDisableStore : kEnableStore,
             .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
             .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
             .initialLayout = config.depthLayout,

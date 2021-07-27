@@ -16,19 +16,17 @@
 
 #include "ShaderGenerator.h"
 
-#include <private/filament/SamplerInterfaceBlock.h>
-#include <private/filament/UniformInterfaceBlock.h>
 #include <filament/MaterialEnums.h>
 
 #include <private/filament/EngineEnums.h>
 #include <private/filament/SibGenerator.h>
-#include <private/filament/UibGenerator.h>
 #include <private/filament/Variant.h>
 
 #include <utils/CString.h>
 
 #include "filamat/MaterialBuilder.h"
 #include "CodeGenerator.h"
+#include "../UibGenerator.h"
 
 using namespace filament;
 using namespace filament::backend;
@@ -228,10 +226,6 @@ std::string ShaderGenerator::createVertexProgram(filament::backend::ShaderModel 
             BindingPoints::PER_VIEW, UibGenerator::getPerViewUib());
     cg.generateUniforms(vs, ShaderType::VERTEX,
             BindingPoints::PER_RENDERABLE, UibGenerator::getPerRenderableUib());
-    if (litVariants && variant.hasShadowReceiver()) {
-        cg.generateUniforms(vs, ShaderType::VERTEX,
-                BindingPoints::SHADOW, UibGenerator::getShadowUib());
-    }
     if (variant.hasSkinningOrMorphing()) {
         cg.generateUniforms(vs, ShaderType::VERTEX,
                 BindingPoints::PER_RENDERABLE_BONES,
@@ -251,7 +245,8 @@ std::string ShaderGenerator::createVertexProgram(filament::backend::ShaderModel 
     cg.generateCommonMaterial(vs, ShaderType::VERTEX);
 
     if (variant.isDepthPass() &&
-            (material.blendingMode != BlendingMode::MASKED) &&
+            material.blendingMode != BlendingMode::MASKED &&
+            !material.hasTransparentShadow &&
             !hasCustomDepthShader()) {
         // these variants are special and are treated as DEPTH variants. Filament will never
         // request that variant for the color pass.
@@ -353,6 +348,7 @@ std::string ShaderGenerator::createFragmentProgram(filament::backend::ShaderMode
     cg.generateDefine(fs, "HAS_DYNAMIC_LIGHTING", litVariants && variant.hasDynamicLighting());
     cg.generateDefine(fs, "HAS_SHADOWING", litVariants && variant.hasShadowReceiver());
     cg.generateDefine(fs, "HAS_SHADOW_MULTIPLIER", material.hasShadowMultiplier);
+    cg.generateDefine(fs, "HAS_TRANSPARENT_SHADOW", material.hasTransparentShadow);
     cg.generateDefine(fs, "HAS_FOG", variant.hasFog());
     cg.generateDefine(fs, "HAS_VSM", variant.hasVsm());
 
@@ -405,6 +401,8 @@ std::string ShaderGenerator::createFragmentProgram(filament::backend::ShaderMode
     cg.generateDefine(fs, getShadingDefine(material.shading), true);
     generateMaterialDefines(fs, cg, mProperties, mDefines);
 
+    cg.generateDefine(fs, "MATERIAL_HAS_CUSTOM_SURFACE_SHADING", material.hasCustomSurfaceShading);
+
     cg.generateShaderInputs(fs, ShaderType::FRAGMENT, material.requiredAttributes, interpolation);
 
     // custom material variables
@@ -420,6 +418,12 @@ std::string ShaderGenerator::createFragmentProgram(filament::backend::ShaderMode
             BindingPoints::PER_RENDERABLE, UibGenerator::getPerRenderableUib());
     cg.generateUniforms(fs, ShaderType::FRAGMENT,
             BindingPoints::LIGHTS, UibGenerator::getLightsUib());
+    if (litVariants && variant.hasShadowReceiver()) {
+        cg.generateUniforms(fs, ShaderType::FRAGMENT,
+                BindingPoints::SHADOW, UibGenerator::getShadowUib());
+    }
+    cg.generateUniforms(fs, ShaderType::FRAGMENT,
+            BindingPoints::FROXEL_RECORDS, UibGenerator::getFroxelRecordUib());
     cg.generateUniforms(fs, ShaderType::FRAGMENT,
             BindingPoints::PER_MATERIAL_INSTANCE, material.uib);
     cg.generateSeparator(fs);
@@ -439,7 +443,7 @@ std::string ShaderGenerator::createFragmentProgram(filament::backend::ShaderMode
 
     // shading model
     if (variant.isDepthPass()) {
-        if (material.blendingMode == BlendingMode::MASKED) {
+        if (material.blendingMode == BlendingMode::MASKED || material.hasTransparentShadow) {
             appendShader(fs, mMaterialCode, mMaterialLineOffset);
         }
         // these variants are special and are treated as DEPTH variants. Filament will never
@@ -448,7 +452,8 @@ std::string ShaderGenerator::createFragmentProgram(filament::backend::ShaderMode
     } else {
         appendShader(fs, mMaterialCode, mMaterialLineOffset);
         if (material.isLit) {
-            cg.generateShaderLit(fs, ShaderType::FRAGMENT, variant, material.shading);
+            cg.generateShaderLit(fs, ShaderType::FRAGMENT, variant, material.shading,
+                    material.hasCustomSurfaceShading);
         } else {
             cg.generateShaderUnlit(fs, ShaderType::FRAGMENT, variant, material.hasShadowMultiplier);
         }

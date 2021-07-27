@@ -37,12 +37,14 @@ struct UTILS_PUBLIC MaterialInfo {
     bool hasDoubleSidedCapability;
     bool hasExternalSamplers;
     bool hasShadowMultiplier;
+    bool hasTransparentShadow;
     bool specularAntiAliasing;
     bool clearCoatIorChange;
     bool flipUV;
     bool multiBounceAO;
     bool multiBounceAOSet;
     bool specularAOSet;
+    bool hasCustomSurfaceShading;
     filament::SpecularAmbientOcclusion specularAO;
     filament::RefractionMode refractionMode;
     filament::RefractionType refractionType;
